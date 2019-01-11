@@ -129,7 +129,7 @@ void udp_handler()
 
 		buffer[n] = 0;
 
-		bool is_idle = false;
+		bool is_idle = false, add = false;
 
 		time_t t = time(NULL);
 		printf("%s", ctime(&t));
@@ -183,6 +183,10 @@ void udp_handler()
 						printf("is idle\n");
 						is_idle = true;
 						break;
+					case 'a':
+						printf("add\n");
+						add = true;
+						break;
 					case 'f':
 						printf("do flash\n");
 						flash = true;
@@ -199,15 +203,27 @@ void udp_handler()
 			}
 		}
 
-		printf("Remaining length %d\n", put);
+		printf("Remaining length %d\n", int(put));
 		buffer[put] = 0x00;
 
 		if (is_idle) {
-			idle_line = buffer;
+			if (add) {
+				idle_line += " ";
+				idle_line += buffer;
+			}
+			else {
+				idle_line = buffer;
+			}
 			x = 0;
 		}
 		else {
-			line = buffer;
+			if (add) {
+				line += " ";
+				line += buffer;
+			}
+			else {
+				line = buffer;
+			}
 			x = x_orig;
 		}
 
