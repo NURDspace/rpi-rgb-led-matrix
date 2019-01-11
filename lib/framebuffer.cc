@@ -53,6 +53,14 @@ PixelDesignator *PixelDesignatorMap::get(int x, int y) {
   return buffer_ + (y*width_) + x;
 }
 
+void PixelDesignatorMap::scrollLeft() {
+	for(int y=0; y<height_; y++) {
+		PixelDesignator *from = &buffer_[y*width_ + 1];
+		PixelDesignator *to = &buffer_[y*width_ + 0];
+		memmove(to, from, sizeof(PixelDesignator) * (width_ -1));
+	}
+}
+
 PixelDesignatorMap::PixelDesignatorMap(int width, int height,
                                        const PixelDesignator &fill_bits)
   : width_(width), height_(height), fill_bits_(fill_bits),
@@ -254,6 +262,10 @@ Framebuffer::Framebuffer(int rows, int columns, int parallel,
 
 Framebuffer::~Framebuffer() {
   delete [] bitplane_buffer_;
+}
+
+void Framebuffer::scrollLeft() {
+  (*shared_mapper_)->scrollLeft();
 }
 
 // TODO: this should also be parsed from some special formatted string, e.g.

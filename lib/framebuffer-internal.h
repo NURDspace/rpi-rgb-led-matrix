@@ -45,6 +45,7 @@ public:
   // Get a writable version of the PixelDesignator. Outside Framebuffer used
   // by the RGBMatrix to re-assign mappings to new PixelDesignatorMappers.
   PixelDesignator *get(int x, int y);
+  void scrollLeft();
 
   inline int width() const { return width_; }
   inline int height() const { return height_; }
@@ -101,6 +102,8 @@ public:
   void Serialize(const char **data, size_t *len) const;
   bool Deserialize(const char *data, size_t len);
   void CopyFrom(const Framebuffer *other);
+
+  void scrollLeft();
 
   // Canvas-inspired methods, but we're not implementing this interface to not
   // have an unnecessary vtable.

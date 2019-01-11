@@ -294,6 +294,8 @@ public:
   virtual void Clear();
   virtual void Fill(uint8_t red, uint8_t green, uint8_t blue);
 
+  virtual void scrollLeft();
+
 
 #ifndef REMOVE_DEPRECATED_TRANSFORMERS
   //--- deprecated section: transformers. Use PixelMapper instead.
@@ -377,6 +379,8 @@ public:
 
   // Copy content from other FrameCanvas owned by the same RGBMatrix.
   void CopyFrom(const FrameCanvas &other);
+
+  void scrollLeft();
 
   // -- Canvas interface.
   virtual int width() const;

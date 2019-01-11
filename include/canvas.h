@@ -46,6 +46,8 @@ public:
 
   // Fill screen with given 24bpp color.
   virtual void Fill(uint8_t red, uint8_t green, uint8_t blue) = 0;
+
+  virtual void scrollLeft() = 0;
 };
 
 #ifndef REMOVE_DEPRECATED_TRANSFORMERS
