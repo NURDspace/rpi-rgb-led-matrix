@@ -187,6 +187,7 @@ void udp_handler()
 						printf("add\n");
 						add = true;
 						break;
+					case 'F':
 					case 'f':
 						printf("do flash\n");
 						flash = true;
