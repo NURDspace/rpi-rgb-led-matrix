@@ -46,6 +46,7 @@ public:
   virtual void SetPixel(int x, int y, uint8_t red, uint8_t green, uint8_t blue);
   virtual void Clear();
   virtual void Fill(uint8_t red, uint8_t green, uint8_t blue);
+  virtual void scrollLeft();
 
 private:
   Canvas *delegatee_;
@@ -95,6 +96,10 @@ void RotateTransformer::TransformCanvas::Clear() {
 
 void RotateTransformer::TransformCanvas::Fill(uint8_t red, uint8_t green, uint8_t blue) {
   delegatee_->Fill(red, green, blue);
+}
+
+void RotateTransformer::TransformCanvas::scrollLeft() {
+  delegatee_->scrollLeft();
 }
 
 void RotateTransformer::TransformCanvas::SetAngle(int angle) {
@@ -166,6 +171,7 @@ public:
   virtual int width() const { return width_; }
   virtual int height() const { return height_; }
   virtual void SetPixel(int x, int y, uint8_t red, uint8_t green, uint8_t blue);
+  virtual void scrollLeft();
 
 private:
   const int parallel_;

@@ -412,6 +412,7 @@ int main(int argc, char *argv[]) {
 			}
 
 			line_lock.unlock();
+			canvas->scrollLeft();
 
 			offscreen_canvas = canvas->SwapOnVSync(offscreen_canvas);
 		}
