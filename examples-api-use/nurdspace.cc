@@ -1,5 +1,6 @@
 #include "led-matrix.h"
 #include "graphics.h"
+#include "font.h"
 
 #include <string>
 #include <thread>
@@ -60,6 +61,49 @@ static bool FullSaturation(const Color &c) {
 	return (c.r == 0 || c.r == 255)
 		&& (c.g == 0 || c.g == 255)
 		&& (c.b == 0 || c.b == 255);
+}
+
+void blit(FrameCanvas *const canvas, const textImage *const in, const int target_x, const int target_y, int source_x, int source_y, const int source_w, const int source_h)
+{
+	int endx = source_x + source_w;
+	if (endx > in->getw())
+		endx = in->getw();
+
+	int endy = source_y + source_h;
+	if (endy > in->geth())
+		endy = in->geth();
+
+	if (source_x < 0)
+		source_y = 0;
+
+	if (source_y < 0)
+		source_y = 0;
+
+	const uint8_t *const buffer = in -> getbuffer();
+
+	for(int y=source_y; y<endy; y++) {
+		for(int x=source_x; x<endx; x++) {
+			const int offset_source = y * in->getw() * 3 + x * 3;
+			if (offset_source < 0)
+				continue;
+
+			int tx = target_x + (x - source_x);
+			int ty = target_y + (y - source_y);
+
+			if (tx < 0)
+				continue;
+			if (ty < 0)
+				continue;
+
+			if (tx >= canvas->width())
+				break;
+
+			if (ty >= canvas->height())
+				break;
+
+			canvas -> SetPixel(tx, ty, buffer[offset_source + 0], buffer[offset_source + 1], buffer[offset_source + 2]);
+		}
+	}
 }
 
 int make_socket (uint16_t port)
@@ -312,8 +356,8 @@ int main(int argc, char *argv[]) {
 	/*
 	 * Load font. This needs to be a filename with a bdf bitmap font.
 	 */
-	rgb_matrix::Font font;
-	if (!font.LoadFont(bdf_font_file)) {
+	rgb_matrix::Font bdffont;
+	if (!bdffont.LoadFont(bdf_font_file)) {
 		fprintf(stderr, "Couldn't load font '%s'\n", bdf_font_file);
 		return 1;
 	}
@@ -324,7 +368,7 @@ int main(int argc, char *argv[]) {
 	 */
 	rgb_matrix::Font *outline_font = NULL;
 	if (with_outline) {
-		outline_font = font.CreateOutlineFont();
+		outline_font = bdffont.CreateOutlineFont();
 	}
 
 	if (brightness < 1 || brightness > 100) {
@@ -347,13 +391,34 @@ int main(int argc, char *argv[]) {
 	// Create a new canvas to be used with led_matrix_swap_on_vsync
 	FrameCanvas *offscreen_canvas = canvas->CreateFrameCanvas();
 
-	int delay_speed_usec = 1000000 / speed / font.CharacterWidth('W');
+	int delay_speed_usec = 1000000 / speed / bdffont.CharacterWidth('W');
 	if (delay_speed_usec < 0)
 		delay_speed_usec = 2000;
 
 	std::thread t(udp_handler);
 
 	time_t ss = 0;
+
+	font::init_fonts();
+
+{
+	const int h = 32;
+	font font_(DEFAULT_FONT_FILE, "appel_g$iq$ite#12ff56$$vlees$$ut$u1$i2$i3$$peer", h, true);
+printf("Go!\n");
+
+	uint8_t *p = NULL;
+	int w = 0;
+	bool flash = false;
+	textImage *ti = font_.getImage(&flash);
+
+	for(int i=offscreen_canvas->width();i>=-ti->getw(); i--) {
+//void blit(FrameCanvas *const canvas, const int target_x, const int target_y, const int source_x, int source_y, const int source_w, const int source_h)
+		blit(offscreen_canvas, ti, i, 0, 0, 0, ti->getw(), canvas->height());
+		offscreen_canvas = canvas->SwapOnVSync(offscreen_canvas);
+		usleep(10000);
+	}
+}
+
 
 	while (!interrupt_received && loops != 0) {
 		offscreen_canvas->Clear(); // clear canvas
@@ -385,13 +450,13 @@ int main(int argc, char *argv[]) {
 
 				if (outline_font) {
 					rgb_matrix::DrawText(offscreen_canvas, *outline_font,
-							x - 1, y + font.baseline(),
+							x - 1, y + bdffont.baseline(),
 							outline_color, &bg_color,
 							use_line.c_str(), letter_spacing - 2);
 				}
 
-				length = rgb_matrix::DrawText(offscreen_canvas, font,
-						x, y + font.baseline(),
+				length = rgb_matrix::DrawText(offscreen_canvas, bdffont,
+						x, y + bdffont.baseline(),
 						color, outline_font ? NULL : &bg_color,
 						use_line.c_str(), letter_spacing);
 
