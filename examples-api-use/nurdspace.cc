@@ -234,7 +234,7 @@ int main(int argc, char *argv[]) {
 
 		if (line_lock.try_lock()) {
 
-			textImage *use_line = ti_idle ? ti_idle : ti_cur;
+			textImage *use_line = ti_cur ? ti_cur : ti_idle;
 			bool is_idle = use_line ? use_line -> idle_status() : false;
 
 			if (use_line) {
