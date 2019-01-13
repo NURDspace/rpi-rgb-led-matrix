@@ -13,7 +13,7 @@ pthread_mutex_t fontconfig_lock = PTHREAD_MUTEX_INITIALIZER;
 FT_Library font::library;
 std::map<std::string, FT_Face> font::font_cache;
 
-void font::draw_bitmap(const FT_Bitmap *const bitmap, const int target_height, const FT_Int x, const FT_Int y, uint8_t r, uint8_t g, uint8_t b, const bool invert, const bool underline, const bool rainbow)
+void font::draw_bitmap(const FT_Bitmap *const bitmap, const int target_height, const FT_Int x, const FT_Int y, uint8_t r, uint8_t g, uint8_t b, const bool invert, const bool underline, const bool rainbow, const uint8_t bcr, const uint8_t bcb, const uint8_t bcg)
 {
 #if 0
 	assert(x >= 0);
@@ -24,29 +24,27 @@ void font::draw_bitmap(const FT_Bitmap *const bitmap, const int target_height, c
 	assert(target_height >= 0);
 #endif
 
-	if (invert)
-	{
-		for(int yo=0; yo<h; yo++)
-		{
-			if (rainbow)
-			{
+	if (invert) {
+		uint8_t cr = r, cg = g, cb = b;
+
+		for(int yo=0; yo<h; yo++) {
+			if (rainbow) {
 				double dr = 0, dg = 0, db = 0;
 				hls_to_rgb(double(yo) / double(h), 0.5, 0.5, &dr, &dg, &db);
-				r = dr * 255.0;
-				g = dg * 255.0;
-				b = db * 255.0;
+				cr = dr * 255.0;
+				cg = dg * 255.0;
+				cb = db * 255.0;
 			}
 
-			for(unsigned int xo=0; xo<bitmap->width; xo++)
-			{
+			for(unsigned int xo=0; xo<bitmap->width; xo++) {
 				int o = yo * w * 3 + (x + xo) * 3;
 
 				if (o + 2 >= bytes)
 					continue;
 
-				result[o + 0] = r;
-				result[o + 1] = g;
-				result[o + 2] = b;
+				result[o + 0] = cr;
+				result[o + 1] = cg;
+				result[o + 2] = cb;
 			}
 		}
 	}
@@ -90,9 +88,11 @@ void font::draw_bitmap(const FT_Bitmap *const bitmap, const int target_height, c
 			if (o + 2 >= bytes)
 				continue;
 
-			result[o + 0] = (pixel_v * r) >> 8;
-			result[o + 1] = (pixel_v * g) >> 8;
-			result[o + 2] = (pixel_v * b) >> 8;
+			if (pixel_v) {
+				result[o + 0] = (pixel_v * r) >> 8;
+				result[o + 1] = (pixel_v * g) >> 8;
+				result[o + 2] = (pixel_v * b) >> 8;
+			}
 		}
 	}
 
@@ -179,17 +179,11 @@ font::font(const std::string & filename, const std::string & text, const int tar
 	{
 		char c = text.at(n);
 
-		if (c == '#')
-		{
-			n += 7;
-			continue;
-		}
-
 		if (c == '$')
 		{
 			char c2 = n < text.size() - 1 ? text.at(++n) : 0;
 
-			if (c2 == '$' || c2 == '#')
+			if (c2 == '$')
 				goto just_draw1;
 
 			n += 1;
@@ -243,37 +237,38 @@ just_draw1:
 	h /= 64;
 
 	want_flash = false;
+	is_idle = false;
 
 	// target_height!!
 	bytes = w * target_height * 3;
 	result = new uint8_t[bytes];
-	memset(result, 0x00, bytes);
 
 	uint8_t color_r = 0xff, color_g = 0xff, color_b = 0xff;
+	uint8_t bcr = 0x00, bcg = 0x00, bcb = 0x00;
 	bool invert = false, underline = false, rainbow = false;
+
+	memset(result, 0x00, bytes);
 
 	double x = 0.0;
 
 	prev_glyph_index = -1;
 	for(unsigned int n = 0; n < text.size();)
 	{
-		char c = text.at(n);
+		const char c = text.at(n);
 
-		if (c == '#' && n < text.size() - 6)
+		if (c == '$')
 		{
-			hex_str_to_rgb(text.substr(n + 1, 6), &color_r, &color_g, &color_b);
-			n += 7;
-			continue;
-		}
-		else if (c == '$' && n < text.size() - 1)
-		{
-			char c2 = text.at(++n);
+			const std::string::size_type eo = text.find('$', ++n);
+			if (eo == std::string::npos)
+				break;
+			
+			char c2 = text.at(n++);
 
-			if (c2 == '$' || c2 == '#')
-				goto just_draw2;
-
-			else if (c2 == 'i')
+			if (c2 == 'i')
 				invert = !invert;
+
+			else if (c2 == 'I')
+				is_idle = true;
 
 			else if (c2 == 'u')
 				underline = !underline;
@@ -284,7 +279,19 @@ just_draw1:
 			else if (c2 == 'r')
 				rainbow = !rainbow;
 
-			n++;
+			else if (c2 == 'C') {
+				hex_str_to_rgb(text.substr(n, 6), &color_r, &color_g, &color_b);
+			}
+
+			else if (c2 == 'B') {
+				hex_str_to_rgb(text.substr(n, 6), &bcr, &bcg, &bcb);
+			}
+			else {
+				printf("%c not understood\n", c2);
+				break;
+			}
+
+			n = eo + 1;
 			continue;
 		}
 
@@ -304,7 +311,7 @@ just_draw2:
 			continue;
 		}
 
-		draw_bitmap(&slot->bitmap, target_height, x / 64.0, max_ascender / 64.0 - slot -> bitmap_top, color_r, color_g, color_b, invert, underline, rainbow);
+		draw_bitmap(&slot->bitmap, target_height, x / 64.0, max_ascender / 64.0 - slot -> bitmap_top, color_r, color_g, color_b, invert, underline, rainbow, bcr, bcg, bcb);
 
 		x += face -> glyph -> metrics.horiAdvance;
 
@@ -321,11 +328,10 @@ font::~font()
 	delete [] result;
 }
 
-textImage * font::getImage(bool *flash_requested)
+textImage * font::getImage()
 {
-	textImage *ti = new textImage(result, this -> w, this -> h);
+	textImage *ti = new textImage(result, this -> w, this -> h, want_flash, is_idle);
 	result = NULL; // transfer ownership of buffer
-	*flash_requested = want_flash;
 	return ti;
 }
 
