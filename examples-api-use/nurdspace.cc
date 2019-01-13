@@ -32,7 +32,6 @@ static int usage(const char *progname) {
 			"\t-b <brightness>   : Sets brightness percent. Default: 100.\n"
 			"\t-x <x-origin>     : X-Origin of displaying text (Default: 0)\n"
 			"\t-y <y-origin>     : Y-Origin of displaying text (Default: 0)\n"
-			"\t-d <duration>     : duration in seconds to show a string (default: 10)\n"
 	       );
 	return 1;
 }
@@ -123,7 +122,6 @@ int x_orig = 0, y_orig = 0;
 int x = x_orig;
 int y = y_orig;
 time_t start = 0;
-int duration = 10, bduration = 10;
 bool endOfLine = false;
 
 void udp_handler(const FrameCanvas *const offscreen_canvas)
@@ -191,9 +189,8 @@ int main(int argc, char *argv[]) {
 	start = time(NULL);
 
 	int opt;
-	while ((opt = getopt(argc, argv, "d:b:x:y:")) != -1) {
+	while ((opt = getopt(argc, argv, "b:x:y:")) != -1) {
 		switch (opt) {
-			case 'd': duration = atoi(optarg); break;
 			case 'b': brightness = atoi(optarg); break;
 			case 'x': x_orig = atoi(optarg); break;
 			case 'y': y_orig = atoi(optarg); break;
@@ -280,7 +277,7 @@ int main(int argc, char *argv[]) {
 
 		if (line_lock.try_lock()) {
 			if (ti_cur) {
-				if (duration && now - start > duration && endOfLine) {
+				if (ti_cur -> get_duration() && now - start > ti_cur -> get_duration() && endOfLine) {
 					printf("finish\n");
 
 					delete ti_cur;
