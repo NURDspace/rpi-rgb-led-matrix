@@ -436,10 +436,6 @@ void RGBMatrix::SetPixel(int x, int y, uint8_t red, uint8_t green, uint8_t blue)
   active_->SetPixel(x, y, red, green, blue);
 }
 
-void RGBMatrix::scrollLeft() {
-  active_->scrollLeft();
-}
-
 void RGBMatrix::Clear() {
   active_->Clear();
 }
@@ -497,9 +493,6 @@ public:
   void SetNewLocation(int x, int y) {
     x_new = x;
     y_new = y;
-  }
-  void scrollLeft() {
-    old_mapper_->scrollLeft();
   }
   virtual void SetPixel(int x, int y, uint8_t r, uint8_t g, uint8_t b) {
     const internal::PixelDesignator *orig_designator = old_mapper_->get(x, y);
@@ -567,7 +560,6 @@ void FrameCanvas::SetPixel(int x, int y,
   frame_->SetPixel(x, y, red, green, blue);
 }
 void FrameCanvas::Clear() { return frame_->Clear(); }
-void FrameCanvas::scrollLeft() { frame_->scrollLeft(); }
 void FrameCanvas::Fill(uint8_t red, uint8_t green, uint8_t blue) {
   frame_->Fill(red, green, blue);
 }
