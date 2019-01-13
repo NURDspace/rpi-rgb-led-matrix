@@ -25,36 +25,16 @@ static void InterruptHandler(int signo) {
 }
 
 static int usage(const char *progname) {
-	fprintf(stderr, "usage: %s [options] <text>\n", progname);
-	fprintf(stderr, "Takes text and scrolls it with speed -s\n");
+	fprintf(stderr, "usage: %s [options]\n", progname);
 	fprintf(stderr, "Options:\n");
 	rgb_matrix::PrintMatrixFlags(stderr);
 	fprintf(stderr,
-			"\t-s <speed>        : Approximate letters per second.\n"
-			"\t-l <loop-count>   : Number of loops through the text. "
-			"-1 for endless (default)\n"
-			"\t-f <font-file>    : Use given font.\n"
 			"\t-b <brightness>   : Sets brightness percent. Default: 100.\n"
 			"\t-x <x-origin>     : X-Origin of displaying text (Default: 0)\n"
 			"\t-y <y-origin>     : Y-Origin of displaying text (Default: 0)\n"
-			"\t-S <spacing>      : Spacing pixels between letters (Default: 0)\n"
 			"\t-d <duration>     : duration in seconds to show a string (default: 10)\n"
-			"\t-i <text>         : initial text to show when idle (default: nothing)\n"
-			"\n"
-			"\t-C <r,g,b>        : Color. Default 255,255,0\n"
-			"\t-B <r,g,b>        : Background-Color. Default 0,0,0\n"
-			"\t-O <r,g,b>        : Outline-Color, e.g. to increase contrast.\n"
 	       );
 	return 1;
-}
-
-static bool parseColor(Color *c, const char *str) {
-	int r, g, b;
-	bool ok =  sscanf(str, "%d,%d,%d", &r, &g, &b) == 3;
-	c -> r = r;
-	c -> g = g;
-	c -> b = b;
-	return ok;
 }
 
 static bool FullSaturation(const Color &c) {
@@ -137,24 +117,16 @@ int make_socket (uint16_t port)
 }
 
 
-std::string line, idle_line;
+textImage *ti_idle = NULL, *ti_cur = NULL;
 std::mutex line_lock;
 int x_orig = 0, y_orig = 0;
 int x = x_orig;
 int y = y_orig;
 time_t start = 0;
-bool with_outline = false;
 int duration = 10, bduration = 10;
-Color color(255, 255, 0);
-Color bg_color(0, 0, 0);
-Color outline_color(0, 0, 0);
-bool flash = false, endOfLine = false;
+bool endOfLine = false;
 
-Color bcolor(255, 255, 0);
-Color bbg_color(0, 0, 0);
-Color boutline_color(0, 0, 0);
-
-void udp_handler()
+void udp_handler(const FrameCanvas *const offscreen_canvas)
 {
 	int fd = make_socket(5001);
 
@@ -182,99 +154,24 @@ void udp_handler()
 
 		line_lock.lock();
 
-		color = bcolor;
-		bg_color = bbg_color;
-		outline_color = boutline_color;
-		duration = bduration;
+		font font_(DEFAULT_FONT_FILE, buffer, offscreen_canvas->height(), true);
+		textImage *ti = font_.getImage();
 
-		ssize_t put = 0;
-		for(ssize_t i=0; i<n;)
-		{
-			if (buffer[i] == '$') {
-				char *end = strchr(&buffer[i + 1], '$');
-				if (!end)
-					break;
-
-				*end = 0x00;
-
-				switch(buffer[i + 1]) {
-					case 'C':
-						printf("fg color\n");
-						if (!parseColor(&color, &buffer[i + 2]))
-							fprintf(stderr, "Invalid color spec: %s\n", &buffer[i + 2]);
-						break;
-					case 'B':
-						printf("bg color\n");
-						if (!parseColor(&bg_color, &buffer[i + 2]))
-							fprintf(stderr, "Invalid background color spec: %s\n", &buffer[i + 2]);
-						break;
-					case 'O':
-						printf("outline color\n");
-						if (!parseColor(&outline_color, &buffer[i + 2]))
-							fprintf(stderr, "Invalid outline color spec: %s\n", &buffer[i + 2]);
-						with_outline = true;
-						break;
-					case 'o':
-						printf("with outline color\n");
-						with_outline = false;
-						break;
-					case 'd':
-						printf("set duration\n");
-						duration = atoi(&buffer[i + 2]);
-						printf("new duration: %d\n", duration);
-						break;
-					case 'i':
-						printf("is idle\n");
-						is_idle = true;
-						break;
-					case 'a':
-						printf("add\n");
-						add = true;
-						break;
-					case 'F':
-					case 'f':
-						printf("do flash\n");
-						flash = true;
-						break;
-					default:
-						printf("%c is not understood\n", buffer[i + 1]);
-						break;
-				}
-
-				i += end - &buffer[i] + 1;
-			}
-			else {
-				buffer[put++] = buffer[i++];
-			}
-		}
-
-		printf("Remaining length %d\n", int(put));
-		buffer[put] = 0x00;
-
-		if (is_idle) {
-			if (add) {
-				idle_line += " ";
-				idle_line += buffer;
-			}
-			else {
-				idle_line = buffer;
-			}
-			x = 0;
+		if (ti -> idle_status()) {
+			delete ti_idle;
+			ti_idle = ti;
 		}
 		else {
-			if (add) {
-				line += " ";
-				line += buffer;
-			}
-			else {
-				line = buffer;
-			}
-			x = x_orig;
+			delete ti_cur;
+			ti_cur = ti;
 		}
 
-		y = y_orig;
+		x = offscreen_canvas->width();
+
 		endOfLine = false;
+
 		start = time(NULL);
+
 		line_lock.unlock();
 	}
 }
@@ -282,93 +179,27 @@ void udp_handler()
 int main(int argc, char *argv[]) {
 	RGBMatrix::Options matrix_options;
 	rgb_matrix::RuntimeOptions runtime_opt;
-	if (!rgb_matrix::ParseOptionsFromFlags(&argc, &argv,
-				&matrix_options, &runtime_opt)) {
+	if (!rgb_matrix::ParseOptionsFromFlags(&argc, &argv, &matrix_options, &runtime_opt))
 		return usage(argv[0]);
-	}
 
 	const char *bdf_font_file = NULL;
 	/* x_origin is set just right of the screen */
 	x_orig = (matrix_options.chain_length * matrix_options.cols) + 5;
 	y_orig = 0;
 	int brightness = 100;
-	int letter_spacing = 0;
-	float speed = 7.0f;
-	int loops = -1;
 
 	start = time(NULL);
 
 	int opt;
-	while ((opt = getopt(argc, argv, "i:d:x:y:f:C:B:O:b:S:s:l:")) != -1) {
+	while ((opt = getopt(argc, argv, "d:b:x:y:")) != -1) {
 		switch (opt) {
-			case 'i': idle_line = optarg; break;
 			case 'd': duration = atoi(optarg); break;
-			case 's': speed = atof(optarg); break;
-			case 'l': loops = atoi(optarg); break;
 			case 'b': brightness = atoi(optarg); break;
 			case 'x': x_orig = atoi(optarg); break;
 			case 'y': y_orig = atoi(optarg); break;
-			case 'f': bdf_font_file = strdup(optarg); break;
-			case 'S': letter_spacing = atoi(optarg); break;
-			case 'C':
-				  if (!parseColor(&color, optarg)) {
-					  fprintf(stderr, "Invalid color spec: %s\n", optarg);
-					  return usage(argv[0]);
-				  }
-				  break;
-			case 'B':
-				  if (!parseColor(&bg_color, optarg)) {
-					  fprintf(stderr, "Invalid background color spec: %s\n", optarg);
-					  return usage(argv[0]);
-				  }
-				  break;
-			case 'O':
-				  if (!parseColor(&outline_color, optarg)) {
-					  fprintf(stderr, "Invalid outline color spec: %s\n", optarg);
-					  return usage(argv[0]);
-				  }
-				  with_outline = true;
-				  break;
 			default:
 				  return usage(argv[0]);
 		}
-	}
-
-	bcolor = color;
-	bbg_color = bg_color;
-	boutline_color = outline_color;
-	bduration = duration;
-
-	for (int i = optind; i < argc; ++i) {
-		line.append(argv[i]).append(" ");
-	}
-
-	if (line.empty()) {
-		fprintf(stderr, "Add the text you want to print on the command-line.\n");
-		return usage(argv[0]);
-	}
-
-	if (bdf_font_file == NULL) {
-		fprintf(stderr, "Need to specify BDF font-file with -f\n");
-		return usage(argv[0]);
-	}
-
-	/*
-	 * Load font. This needs to be a filename with a bdf bitmap font.
-	 */
-	rgb_matrix::Font bdffont;
-	if (!bdffont.LoadFont(bdf_font_file)) {
-		fprintf(stderr, "Couldn't load font '%s'\n", bdf_font_file);
-		return 1;
-	}
-
-	/*
-	 * If we want an outline around the font, we create a new font with
-	 * the original font as a template that is just an outline font.
-	 */
-	rgb_matrix::Font *outline_font = NULL;
-	if (with_outline) {
-		outline_font = bdffont.CreateOutlineFont();
 	}
 
 	if (brightness < 1 || brightness > 100) {
@@ -376,8 +207,7 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 
-	RGBMatrix *canvas = rgb_matrix::CreateMatrixFromOptions(matrix_options,
-			runtime_opt);
+	RGBMatrix *canvas = rgb_matrix::CreateMatrixFromOptions(matrix_options, runtime_opt);
 	if (canvas == NULL)
 		return 1;
 
@@ -391,74 +221,41 @@ int main(int argc, char *argv[]) {
 	// Create a new canvas to be used with led_matrix_swap_on_vsync
 	FrameCanvas *offscreen_canvas = canvas->CreateFrameCanvas();
 
-	int delay_speed_usec = 1000000 / speed / bdffont.CharacterWidth('W');
-	if (delay_speed_usec < 0)
-		delay_speed_usec = 2000;
+	font::init_fonts();
 
-	std::thread t(udp_handler);
+	std::thread t(udp_handler, offscreen_canvas);
 
 	time_t ss = 0;
 
-	font::init_fonts();
-
-{
-	const int h = 32;
-	font font_(DEFAULT_FONT_FILE, "appel_g$iq$ite#12ff56$$vlees$$ut$u1$i2$i3$$peer", h, true);
-printf("Go!\n");
-
-	uint8_t *p = NULL;
-	int w = 0;
-	bool flash = false;
-	textImage *ti = font_.getImage(&flash);
-
-	for(int i=offscreen_canvas->width();i>=-ti->getw(); i--) {
-//void blit(FrameCanvas *const canvas, const int target_x, const int target_y, const int source_x, int source_y, const int source_w, const int source_h)
-		blit(offscreen_canvas, ti, i, 0, 0, 0, ti->getw(), canvas->height());
-		offscreen_canvas = canvas->SwapOnVSync(offscreen_canvas);
-		usleep(10000);
-	}
-}
-
-
-	while (!interrupt_received && loops != 0) {
+	for(;!interrupt_received;) {
 		offscreen_canvas->Clear(); // clear canvas
 
 		time_t now = time(NULL);
 
 		if (line_lock.try_lock()) {
 
-			if (flash) {
-				printf("FLASH\n");
-				for(int i=0; i<5; i++) {
-					offscreen_canvas->Fill(color.r, color.g, color.b);
-					offscreen_canvas = canvas->SwapOnVSync(offscreen_canvas);
-					usleep(101000);
-					offscreen_canvas->Fill(bg_color.r, bg_color.g, bg_color.b);
-					offscreen_canvas = canvas->SwapOnVSync(offscreen_canvas);
-					usleep(101000);
+			textImage *use_line = ti_idle ? ti_idle : ti_cur;
+			bool is_idle = use_line ? use_line -> idle_status() : false;
+
+			if (use_line) {
+				if (use_line->flash_status()) {
+					printf("FLASH\n");
+					for(int i=0; i<5; i++) {
+						offscreen_canvas->Fill(255, 255, 255);
+						offscreen_canvas = canvas->SwapOnVSync(offscreen_canvas);
+						usleep(101000);
+						offscreen_canvas->Fill(0, 0, 0);
+						offscreen_canvas = canvas->SwapOnVSync(offscreen_canvas);
+						usleep(101000);
+					}
+
+					now = time(NULL);
 				}
 
-				flash = false;
-				now = time(NULL);
-			}
+				int length = use_line->getw();
 
-			std::string use_line = line.empty() ? (idle_line.empty() ? "" : idle_line) : line;
-			bool is_idle = line.empty() && !idle_line.empty();
-
-			if (!use_line.empty()) {
-				int length = 0;
-
-				if (outline_font) {
-					rgb_matrix::DrawText(offscreen_canvas, *outline_font,
-							x - 1, y + bdffont.baseline(),
-							outline_color, &bg_color,
-							use_line.c_str(), letter_spacing - 2);
-				}
-
-				length = rgb_matrix::DrawText(offscreen_canvas, bdffont,
-						x, y + bdffont.baseline(),
-						color, outline_font ? NULL : &bg_color,
-						use_line.c_str(), letter_spacing);
+				blit(offscreen_canvas, use_line, x, 0, 0, 0, use_line->getw(), offscreen_canvas->height());
+				offscreen_canvas = canvas->SwapOnVSync(offscreen_canvas);
 
 				if (is_idle) { // scroll 1 pixel every second in idle mode
 					if (now - ss) {
@@ -471,8 +268,6 @@ printf("Go!\n");
 				else if (--x + length < 0) {
 					x = x_orig;
 					endOfLine = true;
-					if (loops > 0)
-						--loops;
 				}
 			}
 
@@ -481,22 +276,18 @@ printf("Go!\n");
 			offscreen_canvas = canvas->SwapOnVSync(offscreen_canvas);
 		}
 
-		usleep(delay_speed_usec);
+		usleep(10000);
 
 		if (line_lock.try_lock()) {
-			if (!line.empty()) {
+			if (ti_cur) {
 				if (duration && now - start > duration && endOfLine) {
 					printf("finish\n");
 
-					line.clear();
+					delete ti_cur;
+					ti_cur = NULL;
 
 					offscreen_canvas->Clear();
 					offscreen_canvas = canvas->SwapOnVSync(offscreen_canvas);
-
-					color = bcolor;
-					bg_color = bbg_color;
-					outline_color = boutline_color;
-					duration = bduration;
 
 					x = 8; // 8 seconds before idle goes off-screen
 				}
