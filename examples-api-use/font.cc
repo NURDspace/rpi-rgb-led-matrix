@@ -238,6 +238,7 @@ just_draw1:
 
 	want_flash = false;
 	is_idle = false;
+	duration = 10;
 
 	// target_height!!
 	bytes = w * target_height * 3;
@@ -275,6 +276,11 @@ just_draw1:
 
 			else if (c2 == 'f')
 				want_flash = true;
+
+			else if (c2 == 'd') {
+				std::string temp = text.substr(n, eo - n);
+				duration = atoi(temp.c_str());
+			}
 
 			else if (c2 == 'r')
 				rainbow = !rainbow;
@@ -330,7 +336,7 @@ font::~font()
 
 textImage * font::getImage()
 {
-	textImage *ti = new textImage(result, this -> w, this -> h, want_flash, is_idle);
+	textImage *ti = new textImage(result, this -> w, this -> h, want_flash, is_idle, duration);
 	result = NULL; // transfer ownership of buffer
 	return ti;
 }
