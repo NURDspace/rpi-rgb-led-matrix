@@ -12,24 +12,30 @@ class textImage
 private:
 	const uint8_t *const buffer;
 	const int w, h;
-	bool want_flash;
-	const bool is_idle;
+	bool wantFlash;
+	const bool isIdle;
 	const int duration;
+	const int prio;
+	bool endOfLine;
 
 public:
-	textImage(const uint8_t *const buffer, const int w, const int h, const bool want_flash, const bool is_idle, const int duration) : buffer(buffer), w(w), h(h), want_flash(want_flash), is_idle(is_idle), duration(duration) {
+	textImage(const uint8_t *const buffer, const int w, const int h, const bool wantFlash, const bool isIdle, const int duration, const int prio) : buffer(buffer), w(w), h(h), wantFlash(wantFlash), isIdle(isIdle), duration(duration), prio(prio) {
+		endOfLine = false;
 	}
 
 	~textImage() {
 		delete [] buffer;
 	}
 
-	const int getw() const { return w; }
-	const int geth() const { return h; }
-	const uint8_t * getbuffer() const { return buffer; }
-	const bool flash_status() { bool rc = want_flash; want_flash = false; return rc; }
-	const bool idle_status() const { return is_idle; }
-	const int get_duration() const { return duration; }
+	const int getW() const { return w; }
+	const int getH() const { return h; }
+	const uint8_t * getBuffer() const { return buffer; }
+	const bool flashStatus() { bool rc = wantFlash; wantFlash = false; return rc; }
+	const bool idleStatus() const { return isIdle; }
+	const int getDuration() const { return duration; }
+	bool getEndOfLine() const { return endOfLine; }
+	void setEndOfLine() { endOfLine = true; }
+	int getPrio() { return prio; }
 };
 
 class font {
@@ -40,7 +46,7 @@ private:
 	uint8_t *result;
 	int bytes, w, h, max_ascender;
 	bool want_flash, is_idle;
-	int duration;
+	int duration, prio;
 
 	void draw_bitmap(const FT_Bitmap *const bitmap, const int target_height, const FT_Int x, const FT_Int y, uint8_t r, uint8_t g, uint8_t b, const bool invert, const bool underline, const bool rainbow, const uint8_t bcr, const uint8_t bcb, const uint8_t bcg);
 
