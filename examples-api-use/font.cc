@@ -283,6 +283,11 @@ just_draw1:
 				duration = atoi(temp.c_str());
 			}
 
+			else if (c2 == 'p') {
+				std::string temp = text.substr(n, eo - n);
+				prio = atoi(temp.c_str());
+			}
+
 			else if (c2 == 'r')
 				rainbow = !rainbow;
 
