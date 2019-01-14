@@ -50,59 +50,6 @@ void hex_str_to_rgb(const std::string & in, uint8_t *const r, uint8_t *const g, 
 	}
 }
 
-void bitblit(uint8_t *const target, const int tw, const int th, const int tx, const int ty, const uint8_t *const source, const int sw, const int sh, const int sx, const int sy, const int scw, const int sch, const std::string & transparent_color, const int alpha)
-{
-	int source_space_x = std::max(0, sw - sx);
-	int source_space_y = std::max(0, sh - sy);
-	int target_space_x = std::max(0, tw - tx);
-	int target_space_y = std::max(0, th - ty);
-	int copy_w = std::min(std::min(std::min(tw, scw), source_space_x), target_space_x);
-	int copy_h = std::min(std::min(std::min(th, sch), source_space_y), target_space_y);
-
-	// printf("copy %dx%d pixels to %d,%d from %d,%d\n", copy_w, copy_h, tx, ty, sx, sy);
-	for(int y=0; y<copy_h; y++)
-	{
-		if (!transparent_color.empty() || alpha >= 0)
-		{
-			uint8_t tr_r = 0, tr_g = 0, tr_b = 0;
-			hex_str_to_rgb(transparent_color, &tr_r, &tr_g, &tr_b);
-
-			for(int x=0; x<copy_w; x++) {
-				int source_offset = (sx + x) * 3 + (sy + y) * sw * 3;
-				int target_offset = (tx + x) * 3 + (ty + y) * tw * 3;
-
-				bool transparent_copy = transparent_color.empty() || source[source_offset + 0] != tr_r || source[source_offset + 1] != tr_g || source[source_offset + 2] != tr_b;
-				if (!transparent_copy)
-					continue;
-
-				if (alpha >= 0)
-				{
-					target[target_offset + 0] = (source[source_offset + 0] * alpha + target[target_offset + 0] * (100 - alpha)) / 100;
-					target[target_offset + 1] = (source[source_offset + 1] * alpha + target[target_offset + 0] * (100 - alpha)) / 100;
-					target[target_offset + 2] = (source[source_offset + 2] * alpha + target[target_offset + 0] * (100 - alpha)) / 100;
-				}
-				else
-				{
-					target[target_offset + 0] = source[source_offset + 0];
-					target[target_offset + 1] = source[source_offset + 1];
-					target[target_offset + 2] = source[source_offset + 2];
-				}
-			}
-		}
-		else
-		{
-			for(int x=0; x<copy_w; x++) {
-				int source_offset = (sx + x) * 3 + (sy + y) * sw * 3;
-				int target_offset = (tx + x) * 3 + (ty + y) * tw * 3;
-
-				target[target_offset + 0] = source[source_offset + 0];
-				target[target_offset + 1] = source[source_offset + 1];
-				target[target_offset + 2] = source[source_offset + 2];
-			}
-		}
-	}
-}
-
 void check_range(int *const chk_val, const int min, const int max)
 {
 	if (*chk_val < min)
@@ -151,4 +98,11 @@ void hls_to_rgb(const double H, const double L, const double S, double *const r,
 	*r = hue_to_rgb(m1, m2, H + 1.0/3.0);
 	*g = hue_to_rgb(m1, m2, H);
 	*b = hue_to_rgb(m1, m2, H - 1.0/3.0);
+}
+
+uint64_t get_ts()
+{
+	struct timeval tv;
+	gettimeofday(&tv, NULL);
+	return tv.tv_sec * 1000L * 1000L  + tv.tv_usec;
 }
