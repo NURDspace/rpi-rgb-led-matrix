@@ -45,12 +45,12 @@ static bool FullSaturation(const Color &c) {
 void blit(FrameCanvas *const canvas, const textImage *const in, const int target_x, const int target_y, int source_x, int source_y, const int source_w, const int source_h)
 {
 	int endx = source_x + source_w;
-	if (endx > in->getw())
-		endx = in->getw();
+	if (endx > in->getW())
+		endx = in->getW();
 
 	int endy = source_y + source_h;
-	if (endy > in->geth())
-		endy = in->geth();
+	if (endy > in->getH())
+		endy = in->getH();
 
 	if (source_x < 0)
 		source_y = 0;
@@ -58,11 +58,11 @@ void blit(FrameCanvas *const canvas, const textImage *const in, const int target
 	if (source_y < 0)
 		source_y = 0;
 
-	const uint8_t *const buffer = in -> getbuffer();
+	const uint8_t *const buffer = in -> getBuffer();
 
 	for(int y=source_y; y<endy; y++) {
 		for(int x=source_x; x<endx; x++) {
-			const int offset_source = y * in->getw() * 3 + x * 3;
+			const int offset_source = y * in->getW() * 3 + x * 3;
 			if (offset_source < 0)
 				continue;
 
@@ -115,14 +115,30 @@ int make_socket (uint16_t port)
 	return sock;
 }
 
-
-textImage *ti_idle = NULL, *ti_cur = NULL;
+textImage *ti_idle = NULL;
+std::vector<textImage *> ti_cur;
 std::mutex line_lock;
 int x_orig = 0, y_orig = 0;
 int x = x_orig;
 int y = y_orig;
 time_t start = 0;
 bool endOfLine = false;
+
+textImage * choose_ti(std::vector<textImage *> *const elements)
+{
+	int best_prio = -1;
+	textImage *sel = NULL;
+
+	for(textImage *cur : *elements) {
+		int cur_prio = cur -> getPrio();
+		if (cur_prio > best_prio) {
+			best_prio = cur_prio;
+			sel = cur;
+		}
+	}
+
+	return sel;
+}
 
 void udp_handler(const FrameCanvas *const offscreen_canvas)
 {
@@ -155,18 +171,15 @@ void udp_handler(const FrameCanvas *const offscreen_canvas)
 		font font_(DEFAULT_FONT_FILE, buffer, offscreen_canvas->height(), true);
 		textImage *ti = font_.getImage();
 
-		if (ti -> idle_status()) {
+		if (ti -> idleStatus()) {
 			delete ti_idle;
 			ti_idle = ti;
 		}
 		else {
-			delete ti_cur;
-			ti_cur = ti;
+			ti_cur.push_back(ti);
 		}
 
 		x = offscreen_canvas->width();
-
-		endOfLine = false;
 
 		start = time(NULL);
 
@@ -230,12 +243,13 @@ int main(int argc, char *argv[]) {
 		time_t now = time(NULL);
 
 		if (line_lock.try_lock()) {
-
-			textImage *use_line = ti_cur ? ti_cur : ti_idle;
-			bool is_idle = use_line ? use_line -> idle_status() : false;
+			textImage *use_line = choose_ti(&ti_cur);
+			if (!use_line)
+				use_line = ti_idle;
+			bool is_idle = use_line ? use_line -> idleStatus() : false;
 
 			if (use_line) {
-				if (use_line->flash_status()) {
+				if (use_line->flashStatus()) {
 					printf("FLASH\n");
 					for(int i=0; i<5; i++) {
 						offscreen_canvas->Fill(255, 255, 255);
@@ -249,9 +263,9 @@ int main(int argc, char *argv[]) {
 					now = time(NULL);
 				}
 
-				int length = use_line->getw();
+				int length = use_line->getW();
 
-				blit(offscreen_canvas, use_line, x, 0, 0, 0, use_line->getw(), offscreen_canvas->height());
+				blit(offscreen_canvas, use_line, x, 0, 0, 0, use_line->getW(), offscreen_canvas->height());
 				offscreen_canvas = canvas->SwapOnVSync(offscreen_canvas);
 
 				if (is_idle) { // scroll 1 pixel every second in idle mode
@@ -264,7 +278,7 @@ int main(int argc, char *argv[]) {
 				}
 				else if (--x + length < 0) {
 					x = x_orig;
-					endOfLine = true;
+					use_line->setEndOfLine();
 				}
 			}
 
@@ -276,17 +290,21 @@ int main(int argc, char *argv[]) {
 		usleep(10000);
 
 		if (line_lock.try_lock()) {
-			if (ti_cur) {
-				if (ti_cur -> get_duration() && now - start > ti_cur -> get_duration() && endOfLine) {
+			size_t idx = 0;
+			while(idx < ti_cur.size()) {
+				if (now - start > ti_cur.at(idx) -> getDuration() && ti_cur.at(idx)->getEndOfLine()) {
 					printf("finish\n");
 
-					delete ti_cur;
-					ti_cur = NULL;
+					delete ti_cur.at(idx);
+					ti_cur.erase(ti_cur.begin() + idx);
 
 					offscreen_canvas->Clear();
 					offscreen_canvas = canvas->SwapOnVSync(offscreen_canvas);
 
 					x = 8; // 8 seconds before idle goes off-screen
+				}
+				else {
+					idx++;
 				}
 			}
 
