@@ -18,6 +18,8 @@
 
 using namespace rgb_matrix;
 
+#define SLEEP_N 10000
+
 volatile bool interrupt_received = false;
 
 static void InterruptHandler(int signo) {
@@ -63,8 +65,6 @@ void blit(FrameCanvas *const canvas, const textImage *const in, const int target
 	for(int y=source_y; y<endy; y++) {
 		for(int x=source_x; x<endx; x++) {
 			const int offset_source = y * in->getW() * 3 + x * 3;
-			if (offset_source < 0)
-				continue;
 
 			int tx = target_x + (x - source_x);
 			int ty = target_y + (y - source_y);
@@ -280,6 +280,7 @@ int main(int argc, char *argv[]) {
 					x = x_orig;
 					use_line->setEndOfLine();
 				}
+				use_line->decreaseDurationLeft(SLEEP_N);
 			}
 
 			line_lock.unlock();
@@ -287,13 +288,15 @@ int main(int argc, char *argv[]) {
 			offscreen_canvas = canvas->SwapOnVSync(offscreen_canvas);
 		}
 
-		usleep(10000);
+		usleep(SLEEP_N);
 
 		if (line_lock.try_lock()) {
 			size_t idx = 0;
 			while(idx < ti_cur.size()) {
-				if (now - start > ti_cur.at(idx) -> getDuration() && ti_cur.at(idx)->getEndOfLine()) {
-					printf("finish\n");
+				if (ti_cur.at(idx) -> getDurationLeft() <= 0 && ti_cur.at(idx)->getEndOfLine()) {
+					time_t t = time(NULL);
+					printf("%s", ctime(&t));
+					printf("finish %s\n", ti_cur.at(idx) -> getOrg().c_str());
 
 					delete ti_cur.at(idx);
 					ti_cur.erase(ti_cur.begin() + idx);

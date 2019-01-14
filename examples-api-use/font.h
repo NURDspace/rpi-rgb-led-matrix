@@ -14,12 +14,13 @@ private:
 	const int w, h;
 	bool wantFlash;
 	const bool isIdle;
-	const int duration;
+	int64_t durationLeft;
 	const int prio;
 	bool endOfLine;
+	std::string org;
 
 public:
-	textImage(const uint8_t *const buffer, const int w, const int h, const bool wantFlash, const bool isIdle, const int duration, const int prio) : buffer(buffer), w(w), h(h), wantFlash(wantFlash), isIdle(isIdle), duration(duration), prio(prio) {
+	textImage(const uint8_t *const buffer, const int w, const int h, const bool wantFlash, const bool isIdle, const int64_t durationLeft, const int prio, const std::string & org) : buffer(buffer), w(w), h(h), wantFlash(wantFlash), isIdle(isIdle), durationLeft(durationLeft), prio(prio), org(org) {
 		endOfLine = false;
 	}
 
@@ -32,10 +33,12 @@ public:
 	const uint8_t * getBuffer() const { return buffer; }
 	const bool flashStatus() { bool rc = wantFlash; wantFlash = false; return rc; }
 	const bool idleStatus() const { return isIdle; }
-	const int getDuration() const { return duration; }
+	int64_t getDurationLeft() const { return durationLeft; }
+	void decreaseDurationLeft(const uint64_t hm) { durationLeft -= hm; }
 	bool getEndOfLine() const { return endOfLine; }
 	void setEndOfLine() { endOfLine = true; }
 	int getPrio() { return prio; }
+	const std::string & getOrg() const { return org; }
 };
 
 class font {
@@ -46,7 +49,9 @@ private:
 	uint8_t *result;
 	int bytes, w, h, max_ascender;
 	bool want_flash, is_idle;
-	int duration, prio;
+	int64_t duration;
+	int prio;
+	std::string org;
 
 	void draw_bitmap(const FT_Bitmap *const bitmap, const int target_height, const FT_Int x, const FT_Int y, uint8_t r, uint8_t g, uint8_t b, const bool invert, const bool underline, const bool rainbow, const uint8_t bcr, const uint8_t bcb, const uint8_t bcg);
 
