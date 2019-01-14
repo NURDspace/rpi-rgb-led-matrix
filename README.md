@@ -3,6 +3,7 @@ nurdspace enhancement
 libfreetype6-dev
 libfontconfig1-dev
 libicu-dev
+ttf-mscorefonts-installer
 
 see https://nurdspace.nl/Led_ticker
 
