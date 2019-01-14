@@ -4,6 +4,7 @@ libfreetype6-dev
 libfontconfig1-dev
 libicu-dev
 ttf-mscorefonts-installer
+ttf-unifont
 
 see https://nurdspace.nl/Led_ticker
 
