@@ -1,6 +1,7 @@
 #include "led-matrix.h"
 #include "graphics.h"
 #include "font.h"
+#include "utils.h"
 
 #include <string>
 #include <thread>
@@ -85,10 +86,10 @@ void blit(FrameCanvas *const canvas, const textImage *const in, const int target
 	}
 }
 
-int make_socket (uint16_t port)
+int make_socket(const uint16_t port)
 {
 	/* Create the socket. */
-	int sock = socket (PF_INET, SOCK_DGRAM, 0);
+	int sock = socket(PF_INET, SOCK_DGRAM, 0);
 	if (sock < 0)
 	{
 		perror ("socket");
@@ -121,7 +122,6 @@ std::mutex line_lock;
 int x_orig = 0, y_orig = 0;
 int x = x_orig;
 int y = y_orig;
-time_t start = 0;
 bool endOfLine = false;
 
 textImage * choose_ti(std::vector<textImage *> *const elements)
@@ -140,9 +140,9 @@ textImage * choose_ti(std::vector<textImage *> *const elements)
 	return sel;
 }
 
-void udp_handler(const FrameCanvas *const offscreen_canvas)
+void udp_textmsgs_handler(const FrameCanvas *const offscreen_canvas, const int listen_port)
 {
-	int fd = make_socket(5001);
+	int fd = make_socket(listen_port);
 
 	for(;;) {
 		char buffer[4096];
@@ -181,8 +181,6 @@ void udp_handler(const FrameCanvas *const offscreen_canvas)
 
 		x = offscreen_canvas->width();
 
-		start = time(NULL);
-
 		line_lock.unlock();
 	}
 }
@@ -197,13 +195,12 @@ int main(int argc, char *argv[]) {
 	/* x_origin is set just right of the screen */
 	x_orig = (matrix_options.chain_length * matrix_options.cols) + 5;
 	y_orig = 0;
-	int brightness = 100;
-
-	start = time(NULL);
+	int brightness = 100, listen_port = 5001;
 
 	int opt;
-	while ((opt = getopt(argc, argv, "b:x:y:")) != -1) {
+	while ((opt = getopt(argc, argv, "t:b:x:y:")) != -1) {
 		switch (opt) {
+			case 't': listen_port = atoi(optarg); break;
 			case 'b': brightness = atoi(optarg); break;
 			case 'x': x_orig = atoi(optarg); break;
 			case 'y': y_orig = atoi(optarg); break;
@@ -233,11 +230,13 @@ int main(int argc, char *argv[]) {
 
 	font::init_fonts();
 
-	std::thread t(udp_handler, offscreen_canvas);
+	std::thread t(udp_textmsgs_handler, offscreen_canvas, listen_port);
 
 	time_t ss = 0;
 
 	for(;!interrupt_received;) {
+		uint64_t render_start = get_ts();
+
 		offscreen_canvas->Clear(); // clear canvas
 
 		time_t now = time(NULL);
@@ -289,7 +288,10 @@ int main(int argc, char *argv[]) {
 			offscreen_canvas = canvas->SwapOnVSync(offscreen_canvas);
 		}
 
-		usleep(SLEEP_N);
+		uint64_t render_took = get_ts() - render_start;
+		int64_t sleep_us = SLEEP_N - render_took;
+		if (sleep_us > 0)
+			usleep(sleep_us);
 
 		if (line_lock.try_lock()) {
 			size_t idx = 0;
