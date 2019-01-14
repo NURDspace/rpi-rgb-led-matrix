@@ -1,3 +1,12 @@
+nurdspace enhancement
+---------------------
+libfreetype6-dev
+libfontconfig1-dev
+libicu-dev
+
+see https://nurdspace.nl/Led_ticker
+
+
 Controlling RGB LED display with Raspberry Pi GPIO
 ==================================================
 
