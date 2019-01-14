@@ -18,9 +18,10 @@ private:
 	const int prio;
 	bool endOfLine;
 	std::string org;
+	bool scroll;
 
 public:
-	textImage(const uint8_t *const buffer, const int w, const int h, const bool wantFlash, const bool isIdle, const int64_t durationLeft, const int prio, const std::string & org) : buffer(buffer), w(w), h(h), wantFlash(wantFlash), isIdle(isIdle), durationLeft(durationLeft), prio(prio), org(org) {
+	textImage(const uint8_t *const buffer, const int w, const int h, const bool wantFlash, const bool isIdle, const int64_t durationLeft, const int prio, const std::string & org, const bool scroll) : buffer(buffer), w(w), h(h), wantFlash(wantFlash), isIdle(isIdle), durationLeft(durationLeft), prio(prio), org(org), scroll(scroll) {
 		endOfLine = false;
 	}
 
@@ -39,6 +40,7 @@ public:
 	void setEndOfLine() { endOfLine = true; }
 	int getPrio() { return prio; }
 	const std::string & getOrg() const { return org; }
+	bool getScrollRequired() const { return scroll; }
 };
 
 class font {

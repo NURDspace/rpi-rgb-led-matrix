@@ -343,7 +343,7 @@ font::~font()
 
 textImage * font::getImage()
 {
-	textImage *ti = new textImage(result, this -> w, this -> h, want_flash, is_idle, duration, prio, org);
+	textImage *ti = new textImage(result, this -> w, this -> h, want_flash, is_idle, duration, prio, org, true);
 	result = NULL; // transfer ownership of buffer
 	return ti;
 }
