@@ -238,8 +238,9 @@ just_draw1:
 
 	want_flash = false;
 	is_idle = false;
-	duration = 10;
+	duration = 10 * 1000 * 1000;
 	prio = 0;
+	org = text;
 
 	// target_height!!
 	bytes = w * target_height * 3;
@@ -280,7 +281,7 @@ just_draw1:
 
 			else if (c2 == 'd') {
 				std::string temp = text.substr(n, eo - n);
-				duration = atoi(temp.c_str());
+				duration = int64_t(atof(temp.c_str()) * 1000 * 1000);
 			}
 
 			else if (c2 == 'p') {
@@ -342,7 +343,7 @@ font::~font()
 
 textImage * font::getImage()
 {
-	textImage *ti = new textImage(result, this -> w, this -> h, want_flash, is_idle, duration, prio);
+	textImage *ti = new textImage(result, this -> w, this -> h, want_flash, is_idle, duration, prio, org);
 	result = NULL; // transfer ownership of buffer
 	return ti;
 }
