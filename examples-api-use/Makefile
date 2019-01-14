@@ -1,7 +1,7 @@
-CFLAGS=-Wall -O3 -g -Wextra -Wno-unused-parameter `pkg-config --cflags fontconfig`
+CFLAGS=-Wall -O3 -g -Wextra -Wno-unused-parameter `pkg-config --cflags fontconfig freetype2`
 CXXFLAGS=$(CFLAGS)
-OBJECTS=demo-main.o minimal-example.o c-example.o text-example.o scrolling-text-example.o clock.o ledcat.o input-example.o nurdspace.o scroll-test.o font.o utils.o
-BINARIES=demo minimal-example c-example text-example scrolling-text-example clock ledcat input-example nurdspace scroll-test
+OBJECTS=demo-main.o minimal-example.o c-example.o text-example.o scrolling-text-example.o clock.o ledcat.o input-example.o nurdspace.o font.o utils.o
+BINARIES=demo minimal-example c-example text-example scrolling-text-example clock ledcat input-example nurdspace 
 
 # Where our library resides. You mostly only need to change the
 # RGB_LIB_DISTRIBUTION, this is where the library is checked out.
@@ -10,7 +10,7 @@ RGB_INCDIR=$(RGB_LIB_DISTRIBUTION)/include
 RGB_LIBDIR=$(RGB_LIB_DISTRIBUTION)/lib
 RGB_LIBRARY_NAME=rgbmatrix
 RGB_LIBRARY=$(RGB_LIBDIR)/lib$(RGB_LIBRARY_NAME).a
-LDFLAGS+=-L$(RGB_LIBDIR) -l$(RGB_LIBRARY_NAME) -lrt -lm -lpthread `pkg-config --libs fontconfig`
+LDFLAGS+=-L$(RGB_LIBDIR) -l$(RGB_LIBRARY_NAME) -lrt -lm -lpthread
 
 all : $(BINARIES)
 
@@ -34,7 +34,7 @@ scroll-test : scroll-test.o
 	$(CXX) $< -o $@ $(LDFLAGS)
 
 nurdspace : nurdspace.o $(RGB_LIBRARY) utils.o font.o
-	$(CXX) $< -o $@ $(LDFLAGS) font.o utils.o
+	$(CXX) $< -o $@ $(LDFLAGS) font.o utils.o `pkg-config --libs fontconfig freetype2 icu-i18n`
 
 # Since the C example uses the C++ library underneath, which depends on C++
 # runtime stuff, you still have to also link -lstdc++

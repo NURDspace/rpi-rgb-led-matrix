@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <assert.h>
 #include <fontconfig/fontconfig.h>
+#include <unicode/ustring.h>
 #include "font.h"
 #include "utils.h"
 
@@ -164,6 +165,28 @@ font::font(const std::string & filename, const std::string & text, const int tar
 	FT_Set_Char_Size(face, target_height * 64, target_height * 64, 72, 72); /* set character size */
 	FT_GlyphSlot slot = face->glyph;
 
+	{
+		// FreeType uses Unicode as glyph index; so we have to convert string from UTF8 to Unicode(UTF32)
+		int utf16_buf_size = text.size() + 1; // +1 for the last '\0'
+		UChar *utf16_str = new UChar[utf16_buf_size];
+		UErrorCode err = U_ZERO_ERROR;
+		int utf16_length;
+		u_strFromUTF8(utf16_str, utf16_buf_size, &utf16_length, text.c_str(), text.size(), &err);
+		if (err != U_ZERO_ERROR) {
+			fprintf(stderr, "u_strFromUTF8() failed: %s\n", u_errorName(err));
+			return;
+		}
+
+		int utf32_buf_size = utf16_length + 1; // +1 for the last '\0'
+		UChar32 *utf32_str = new UChar32[utf32_buf_size];
+		int utf32_length;
+		u_strToUTF32(utf32_str, utf32_buf_size, &utf32_length, utf16_str, utf16_length, &err);
+		if (err != U_ZERO_ERROR) {
+			fprintf(stderr, "u_strToUTF32() failed: %s\n", u_errorName(err));
+			return;
+		}
+	}
+
 	w = 0;
 
 	bool use_kerning = FT_HAS_KERNING(face);
@@ -264,7 +287,7 @@ just_draw1:
 			const std::string::size_type eo = text.find('$', ++n);
 			if (eo == std::string::npos)
 				break;
-			
+
 			char c2 = text.at(n++);
 
 			if (c2 == 'i')
