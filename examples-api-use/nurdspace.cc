@@ -276,10 +276,11 @@ int main(int argc, char *argv[]) {
 						ss = now;
 					}
 				}
-				else if (--x + length < 0) {
+				else if (use_line -> getScrollRequired() && --x + length < 0) {
 					x = x_orig;
 					use_line->setEndOfLine();
 				}
+
 				use_line->decreaseDurationLeft(SLEEP_N);
 			}
 
