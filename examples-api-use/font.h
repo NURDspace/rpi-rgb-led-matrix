@@ -5,7 +5,10 @@
 #include <freetype2/ft2build.h>
 #include FT_FREETYPE_H
 
-#define DEFAULT_FONT_FILE "/usr/share/fonts/truetype/msttcorefonts/Verdana.ttf"
+//#define DEFAULT_FONT_FILE "/usr/share/fonts/truetype/msttcorefonts/Verdana.ttf"
+//#define DEFAULT_FONT_FILE "seguiemj.ttf"
+//#define DEFAULT_FONT_FILE "EmojiOneColor-SVGinOT-1.3/EmojiOneColor-SVGinOT.ttf"
+#define DEFAULT_FONT_FILE "/usr/share/fonts/truetype/unifont/unifont.ttf"
 
 class textImage
 {
