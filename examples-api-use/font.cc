@@ -164,6 +164,9 @@ font::font(const std::string & filename, const std::string & text, const int tar
 
 	FT_Select_Charmap(face, ft_encoding_unicode);
 
+	if (FT_HAS_COLOR(face))
+		printf("Font has colors\n");
+
 	FT_Set_Char_Size(face, target_height * 64, target_height * 64, 72, 72); /* set character size */
 	FT_GlyphSlot slot = face->glyph;
 
