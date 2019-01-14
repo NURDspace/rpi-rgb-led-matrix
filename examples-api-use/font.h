@@ -23,6 +23,9 @@ private:
 public:
 	textImage(const uint8_t *const buffer, const int w, const int h, const bool wantFlash, const bool isIdle, const int64_t durationLeft, const int prio, const std::string & org, const bool scroll) : buffer(buffer), w(w), h(h), wantFlash(wantFlash), isIdle(isIdle), durationLeft(durationLeft), prio(prio), org(org), scroll(scroll) {
 		endOfLine = false;
+
+		printf("New: %dx%d, flash: %d, idle: %d, duration: %f, prio: %d, scroll: %d, text: %s\n",
+			w, h, wantFlash, isIdle, durationLeft / 1000000.0, prio, scroll, org.c_str());
 	}
 
 	~textImage() {
@@ -38,9 +41,9 @@ public:
 	void decreaseDurationLeft(const uint64_t hm) { durationLeft -= hm; }
 	bool getEndOfLine() const { return endOfLine; }
 	void setEndOfLine() { endOfLine = true; }
-	int getPrio() { return prio; }
+	const int getPrio() const { return prio; }
 	const std::string & getOrg() const { return org; }
-	bool getScrollRequired() const { return scroll; }
+	const bool getScrollRequired() const { return scroll; }
 };
 
 class font {
@@ -54,6 +57,7 @@ private:
 	int64_t duration;
 	int prio;
 	std::string org;
+	bool scroll;
 
 	void draw_bitmap(const FT_Bitmap *const bitmap, const int target_height, const FT_Int x, const FT_Int y, uint8_t r, uint8_t g, uint8_t b, const bool invert, const bool underline, const bool rainbow, const uint8_t bcr, const uint8_t bcb, const uint8_t bcg);
 

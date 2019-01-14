@@ -162,8 +162,13 @@ font::font(const std::string & filename, const std::string & text, const int tar
 		face = it -> second;
 	}
 
+	FT_Select_Charmap(face, ft_encoding_unicode);
+
 	FT_Set_Char_Size(face, target_height * 64, target_height * 64, 72, 72); /* set character size */
 	FT_GlyphSlot slot = face->glyph;
+
+	UChar32 *utf32_str = NULL;
+	int utf32_len = 0;
 
 	{
 		// FreeType uses Unicode as glyph index; so we have to convert string from UTF8 to Unicode(UTF32)
@@ -177,14 +182,17 @@ font::font(const std::string & filename, const std::string & text, const int tar
 			return;
 		}
 
+		utf32_len = utf16_length;
 		int utf32_buf_size = utf16_length + 1; // +1 for the last '\0'
-		UChar32 *utf32_str = new UChar32[utf32_buf_size];
+		utf32_str = new UChar32[utf32_buf_size];
 		int utf32_length;
 		u_strToUTF32(utf32_str, utf32_buf_size, &utf32_length, utf16_str, utf16_length, &err);
 		if (err != U_ZERO_ERROR) {
 			fprintf(stderr, "u_strToUTF32() failed: %s\n", u_errorName(err));
 			return;
 		}
+
+		delete [] utf16_str;
 	}
 
 	w = 0;
@@ -198,19 +206,17 @@ font::font(const std::string & filename, const std::string & text, const int tar
 
 	int max_descender = 0;
 	int prev_glyph_index = -1;
-	for(unsigned int n = 0; n < text.size();)
+	for(unsigned int n = 0; n < utf32_len;)
 	{
-		char c = text.at(n);
+		int c = utf32_str[n];
 
 		if (c == '$')
 		{
-			char c2 = n < text.size() - 1 ? text.at(++n) : 0;
+			const std::string::size_type eo = text.find('$', ++n);
+			if (eo == std::string::npos)
+				break;
 
-			if (c2 == '$')
-				goto just_draw1;
-
-			n += 1;
-
+			n = eo + 1;
 			continue;
 		}
 
@@ -264,6 +270,7 @@ just_draw1:
 	duration = 10 * 1000 * 1000;
 	prio = 0;
 	org = text;
+	scroll = true;
 
 	// target_height!!
 	bytes = w * target_height * 3;
@@ -278,9 +285,9 @@ just_draw1:
 	double x = 0.0;
 
 	prev_glyph_index = -1;
-	for(unsigned int n = 0; n < text.size();)
+	for(unsigned int n = 0; n < utf32_len;)
 	{
-		const char c = text.at(n);
+		const int c = utf32_str[n];
 
 		if (c == '$')
 		{
@@ -304,7 +311,7 @@ just_draw1:
 
 			else if (c2 == 'd') {
 				std::string temp = text.substr(n, eo - n);
-				duration = int64_t(atof(temp.c_str()) * 1000 * 1000);
+				duration = int64_t(atof(temp.c_str()) * 1000L * 1000L);
 			}
 
 			else if (c2 == 'p') {
@@ -331,7 +338,6 @@ just_draw1:
 			continue;
 		}
 
-just_draw2:
 		int glyph_index = FT_Get_Char_Index(face, c);
 
 		if (use_kerning && prev_glyph_index != -1 && glyph_index)
@@ -356,6 +362,8 @@ just_draw2:
 		n++;
 	}
 
+	delete [] utf32_str;
+
 	pthread_mutex_unlock(&freetype2_lock);
 }
 
@@ -366,7 +374,7 @@ font::~font()
 
 textImage * font::getImage()
 {
-	textImage *ti = new textImage(result, this -> w, this -> h, want_flash, is_idle, duration, prio, org, true);
+	textImage *ti = new textImage(result, this -> w, this -> h, want_flash, is_idle, duration, prio, org, scroll);
 	result = NULL; // transfer ownership of buffer
 	return ti;
 }
