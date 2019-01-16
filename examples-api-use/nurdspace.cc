@@ -157,12 +157,15 @@ void udp_textmsgs_handler(const FrameCanvas *const offscreen_canvas, const int l
 			exit(EXIT_FAILURE);
 		}
 
+		char addr[INET_ADDRSTRLEN];
+		inet_ntop(AF_INET, &(peer.sin_addr), addr, INET_ADDRSTRLEN);
+
 		buffer[n] = 0;
 
 		bool is_idle = false, add = false;
 
 		time_t t = time(NULL);
-		printf("%s", ctime(&t));
+		printf("%s %s", addr, ctime(&t));
 
 		printf("Recv: %s\n", buffer);
 
