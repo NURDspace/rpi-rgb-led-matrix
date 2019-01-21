@@ -124,7 +124,7 @@ int x = x_orig;
 int y = y_orig;
 bool endOfLine = false;
 
-textImage * choose_ti(std::vector<textImage *> *const elements)
+textImage * choose_ti_higher_prio(std::vector<textImage *> *const elements)
 {
 	int best_prio = -1;
 	textImage *sel = NULL;
@@ -138,6 +138,17 @@ textImage * choose_ti(std::vector<textImage *> *const elements)
 	}
 
 	return sel;
+}
+
+ssize_t choose_ti_same_prio(std::vector<textImage *> *const elements, const int cmp_prio)
+{
+	for(ssize_t nr=0; nr<elements -> size(); nr++) {
+		int cur_prio = elements -> at(nr) -> getPrio();
+		if (cur_prio == cmp_prio)
+			return nr;
+	}
+
+	return -1;
 }
 
 void udp_textmsgs_handler(const FrameCanvas *const offscreen_canvas, const int listen_port)
@@ -169,17 +180,33 @@ void udp_textmsgs_handler(const FrameCanvas *const offscreen_canvas, const int l
 
 		printf("Recv: %s\n", buffer);
 
+		int cur_prio = -1;
+		char *prio = strstr(buffer, "$p");
+		if (prio)
+			cur_prio = atoi(prio + 2);
+
 		line_lock.lock();
 
-		font font_(DEFAULT_FONT_FILE, buffer, offscreen_canvas->height(), true);
-		textImage *ti = font_.getImage();
+		ssize_t nr = choose_ti_same_prio(&ti_cur, cur_prio);
 
-		if (ti -> idleStatus()) {
-			delete ti_idle;
-			ti_idle = ti;
+		if (nr >= 0) {
+			font font_(DEFAULT_FONT_FILE, std::string(buffer) + " " + ti_cur.at(nr) -> getOrg(), offscreen_canvas->height(), true);
+			textImage *ti = font_.getImage();
+
+			delete ti_cur.at(nr);
+			ti_cur.at(nr) = ti;
 		}
 		else {
-			ti_cur.push_back(ti);
+			font font_(DEFAULT_FONT_FILE, buffer, offscreen_canvas->height(), true);
+			textImage *ti = font_.getImage();
+
+			if (ti -> idleStatus()) {
+				delete ti_idle;
+				ti_idle = ti;
+			}
+			else {
+				ti_cur.push_back(ti);
+			}
 		}
 
 		x = offscreen_canvas->width();
@@ -245,7 +272,7 @@ int main(int argc, char *argv[]) {
 		time_t now = time(NULL);
 
 		if (line_lock.try_lock()) {
-			textImage *use_line = choose_ti(&ti_cur);
+			textImage *use_line = choose_ti_higher_prio(&ti_cur);
 			if (!use_line)
 				use_line = ti_idle;
 			bool is_idle = use_line ? use_line -> idleStatus() : false;
