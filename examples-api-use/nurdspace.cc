@@ -123,6 +123,109 @@ int x_orig = 0, y_orig = 0;
 int x = x_orig;
 int y = y_orig;
 bool endOfLine = false;
+time_t pixelflut_end = 0;
+uint8_t *pixelflutbuf = NULL;
+
+int fromhex(int c)
+{
+	c = toupper(c);
+
+	if (c >= 'A')
+		return c - 'A' + 10;
+
+	return c - '0';
+}
+
+void putPixelBuf(FrameCanvas *const offscreen_canvas) {
+	const int W = offscreen_canvas -> width(), H = offscreen_canvas -> height();
+
+	for(int y=0; y<H; y++) {
+		for(int x=0; x<W; x++) {
+			int o = y * W * 3 + x * 3;
+
+			offscreen_canvas -> SetPixel(x, y, pixelflutbuf[o + 0], pixelflutbuf[o + 1], pixelflutbuf[o + 2]);
+		}
+	}
+}
+
+void udp_pixelflut_handler(FrameCanvas *const offscreen_canvas, const int listen_port)
+{
+	int fd = make_socket(listen_port);
+
+	line_lock.lock();
+	const int W = offscreen_canvas -> width(), H = offscreen_canvas -> height();
+	line_lock.unlock();
+
+	printf("resolution pixelflut: %dx%d, port %d\n", W, H, listen_port);
+
+	for(;;) {
+		char buffer[4096];
+		struct sockaddr_in peer;
+		socklen_t peer_len = sizeof(peer);
+
+		ssize_t n = recvfrom(fd, buffer, sizeof buffer - 1, 0, (struct sockaddr *)&peer, &peer_len);
+		if (n == -1) {
+			perror("recvfrom");
+			exit(EXIT_FAILURE);
+		}
+
+		buffer[n] = 0x00;
+
+int cnt = 0;
+
+		char *p = buffer;
+		while(p) {
+			char *lf = strchr(p, '\n');
+			if (lf)
+				*lf = 0x00;
+
+			// PX 20 30 ff8800
+			if (p[0] != 'P' || p[1] != 'X')
+				break;
+
+			int tx = atoi(&p[3]);
+			char *space = strchr(&p[4], ' ');
+			if (!space)
+				break;
+
+			int ty = atoi(space + 1);
+
+			space = strchr(space + 1, ' ');
+			if (!space)
+				break;
+			//printf("%d %d %s\n", cnt, p[0], p);
+
+cnt++;
+
+			char *rgb = space + 1;
+			int r = (fromhex(rgb[0]) << 4) + fromhex(rgb[1]);
+			int g = (fromhex(rgb[2]) << 4) + fromhex(rgb[3]);
+			int b = (fromhex(rgb[4]) << 4) + fromhex(rgb[5]);
+
+			pixelflutbuf[ty * W * 3 + tx * 3 + 0] = r;
+			pixelflutbuf[ty * W * 3 + tx * 3 + 1] = g;
+			pixelflutbuf[ty * W * 3 + tx * 3 + 2] = b;
+
+			if (lf)
+				p = lf + 1;
+			else
+				p = NULL;
+		}
+		//printf("%d\n", cnt);
+
+		line_lock.lock();
+
+		delete ti_idle;
+		ti_idle = NULL;
+
+		putPixelBuf(offscreen_canvas);
+
+		pixelflut_end = time(NULL) + 1;
+
+		line_lock.unlock();
+	}
+}
+
 
 textImage * choose_ti_higher_prio(std::vector<textImage *> *const elements)
 {
@@ -225,7 +328,7 @@ int main(int argc, char *argv[]) {
 	/* x_origin is set just right of the screen */
 	x_orig = (matrix_options.chain_length * matrix_options.cols) + 5;
 	y_orig = 0;
-	int brightness = 100, listen_port = 5001;
+	int brightness = 100, listen_port = 5001, listen_port3 = 5003;
 
 	int opt;
 	while ((opt = getopt(argc, argv, "t:b:x:y:")) != -1) {
@@ -260,14 +363,16 @@ int main(int argc, char *argv[]) {
 
 	font::init_fonts();
 
+	pixelflutbuf = (uint8_t *)calloc(1, canvas->width() * canvas->height() * 3);
+
 	std::thread t(udp_textmsgs_handler, offscreen_canvas, listen_port);
+
+	std::thread t3(udp_pixelflut_handler, offscreen_canvas, listen_port3);
 
 	time_t ss = 0;
 
 	for(;!interrupt_received;) {
 		uint64_t render_start = get_ts();
-
-		offscreen_canvas->Clear(); // clear canvas
 
 		time_t now = time(NULL);
 
@@ -278,6 +383,8 @@ int main(int argc, char *argv[]) {
 			bool is_idle = use_line ? use_line -> idleStatus() : false;
 
 			if (use_line) {
+				putPixelBuf(offscreen_canvas);
+
 				if (use_line->flashStatus()) {
 					printf("FLASH\n");
 					for(int i=0; i<5; i++) {
@@ -313,9 +420,9 @@ int main(int argc, char *argv[]) {
 				use_line->decreaseDurationLeft(SLEEP_N);
 			}
 
-			line_lock.unlock();
-
 			offscreen_canvas = canvas->SwapOnVSync(offscreen_canvas);
+
+			line_lock.unlock();
 		}
 
 		uint64_t render_took = get_ts() - render_start;
@@ -334,7 +441,7 @@ int main(int argc, char *argv[]) {
 					delete ti_cur.at(idx);
 					ti_cur.erase(ti_cur.begin() + idx);
 
-					offscreen_canvas->Clear();
+					putPixelBuf(offscreen_canvas);
 					offscreen_canvas = canvas->SwapOnVSync(offscreen_canvas);
 
 					x = 8; // 8 seconds before idle goes off-screen
@@ -343,6 +450,13 @@ int main(int argc, char *argv[]) {
 					idx++;
 				}
 			}
+
+			int n = canvas -> width() * canvas -> height() * 3;
+			for(int i=0; i<n; i++)
+				pixelflutbuf[i] = (int(pixelflutbuf[i]) * 123) / 124;
+			putPixelBuf(offscreen_canvas);
+			offscreen_canvas = canvas->SwapOnVSync(offscreen_canvas);
+			offscreen_canvas = canvas->SwapOnVSync(offscreen_canvas);
 
 			line_lock.unlock();
 		}
