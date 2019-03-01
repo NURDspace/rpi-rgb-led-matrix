@@ -94,6 +94,11 @@ void font::draw_bitmap(const FT_Bitmap *const bitmap, const int target_height, c
 				result[o + 1] = (pixel_v * g) >> 8;
 				result[o + 2] = (pixel_v * b) >> 8;
 			}
+			else {
+				result[o + 0] = bcr;
+				result[o + 1] = bcg;
+				result[o + 2] = bcb;
+			}
 		}
 	}
 

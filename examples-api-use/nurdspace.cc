@@ -76,10 +76,10 @@ void blit(FrameCanvas *const canvas, const textImage *const in, const int target
 				continue;
 
 			if (tx >= canvas->width())
-				break;
+				continue;
 
 			if (ty >= canvas->height())
-				break;
+				continue;
 
 			canvas -> SetPixel(tx, ty, buffer[offset_source + 0], buffer[offset_source + 1], buffer[offset_source + 2]);
 		}
@@ -148,7 +148,7 @@ void putPixelBuf(FrameCanvas *const offscreen_canvas) {
 	}
 }
 
-void udp_pixelflut_handler(FrameCanvas *const offscreen_canvas, const int listen_port)
+void udp_pixelflut_ascii_handler(FrameCanvas *const offscreen_canvas, const int listen_port)
 {
 	int fd = make_socket(listen_port);
 
@@ -156,7 +156,7 @@ void udp_pixelflut_handler(FrameCanvas *const offscreen_canvas, const int listen
 	const int W = offscreen_canvas -> width(), H = offscreen_canvas -> height();
 	line_lock.unlock();
 
-	printf("resolution pixelflut: %dx%d, port %d\n", W, H, listen_port);
+	printf("resolution pixelflut_ascii: %dx%d, port %d\n", W, H, listen_port);
 
 	for(;;) {
 		char buffer[4096];
@@ -226,6 +226,59 @@ cnt++;
 	}
 }
 
+void udp_pixelflut_bin_handler(FrameCanvas *const offscreen_canvas, const int listen_port)
+{
+	int fd = make_socket(listen_port);
+
+	line_lock.lock();
+	const int W = offscreen_canvas -> width(), H = offscreen_canvas -> height();
+	line_lock.unlock();
+
+	printf("resolution pixelflut_bin: %dx%d, port %d\n", W, H, listen_port);
+
+	for(;;) {
+		char buffer[4096];
+		struct sockaddr_in peer;
+		socklen_t peer_len = sizeof(peer);
+
+		ssize_t n = recvfrom(fd, buffer, sizeof buffer - 1, 0, (struct sockaddr *)&peer, &peer_len);
+		if (n == -1) {
+			perror("recvfrom");
+			exit(EXIT_FAILURE);
+		}
+
+		buffer[n] = 0x00;
+
+		int inc = buffer[1] ? 8 : 7;
+
+		for(int i=2; i<n; i += inc) {
+			int x = (buffer[i + 1] << 8) | buffer[i + 0];
+			int y = (buffer[i + 3] << 8) | buffer[i + 2];
+			int r = buffer[4];
+			int g = buffer[5];
+			int b = buffer[6];
+
+			if (x < W && y < H) {
+				int o = y * W * 3 + x * 3;
+
+				pixelflutbuf[o + 0] = r;
+				pixelflutbuf[o + 1] = g;
+				pixelflutbuf[o + 2] = b;
+			}
+		}
+
+		line_lock.lock();
+
+		delete ti_idle;
+		ti_idle = NULL;
+
+		putPixelBuf(offscreen_canvas);
+
+		pixelflut_end = time(NULL) + 1;
+
+		line_lock.unlock();
+	}
+}
 
 textImage * choose_ti_higher_prio(std::vector<textImage *> *const elements)
 {
@@ -314,6 +367,8 @@ void udp_textmsgs_handler(const FrameCanvas *const offscreen_canvas, const int l
 
 		x = offscreen_canvas->width();
 
+		int np = offscreen_canvas -> width() * offscreen_canvas -> height() * 3;
+		memset(pixelflutbuf, 0x00, np);
 		line_lock.unlock();
 	}
 }
@@ -328,7 +383,7 @@ int main(int argc, char *argv[]) {
 	/* x_origin is set just right of the screen */
 	x_orig = (matrix_options.chain_length * matrix_options.cols) + 5;
 	y_orig = 0;
-	int brightness = 100, listen_port = 5001, listen_port3 = 5003;
+	int brightness = 100, listen_port = 5001, listen_port3 = 5003, listen_port4 = 5004;
 
 	int opt;
 	while ((opt = getopt(argc, argv, "t:b:x:y:")) != -1) {
@@ -367,7 +422,9 @@ int main(int argc, char *argv[]) {
 
 	std::thread t(udp_textmsgs_handler, offscreen_canvas, listen_port);
 
-	std::thread t3(udp_pixelflut_handler, offscreen_canvas, listen_port3);
+	std::thread t3(udp_pixelflut_ascii_handler, offscreen_canvas, listen_port3);
+
+	std::thread t4(udp_pixelflut_bin_handler, offscreen_canvas, listen_port4);
 
 	time_t ss = 0;
 
@@ -383,7 +440,7 @@ int main(int argc, char *argv[]) {
 			bool is_idle = use_line ? use_line -> idleStatus() : false;
 
 			if (use_line) {
-				putPixelBuf(offscreen_canvas);
+				//putPixelBuf(offscreen_canvas);
 
 				if (use_line->flashStatus()) {
 					printf("FLASH\n");
@@ -441,7 +498,6 @@ int main(int argc, char *argv[]) {
 					delete ti_cur.at(idx);
 					ti_cur.erase(ti_cur.begin() + idx);
 
-					putPixelBuf(offscreen_canvas);
 					offscreen_canvas = canvas->SwapOnVSync(offscreen_canvas);
 
 					x = 8; // 8 seconds before idle goes off-screen
