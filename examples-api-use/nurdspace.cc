@@ -204,7 +204,7 @@ void udp_pixelflut_ascii_handler(FrameCanvas *const offscreen_canvas, const int 
 	printf("resolution pixelflut_ascii: %dx%d, port %d\n", W, H, listen_port);
 
 	for(;;) {
-		char buffer[4096];
+		char buffer[65536];
 		struct sockaddr_in peer;
 		socklen_t peer_len = sizeof(peer);
 
@@ -276,7 +276,7 @@ void udp_pixelflut_bin_handler(FrameCanvas *const offscreen_canvas, const int li
 	printf("resolution pixelflut_bin: %dx%d, port %d\n", W, H, listen_port);
 
 	for(;;) {
-		char buffer[4096];
+		char buffer[65536];
 		struct sockaddr_in peer;
 		socklen_t peer_len = sizeof(peer);
 
@@ -297,8 +297,7 @@ void udp_pixelflut_bin_handler(FrameCanvas *const offscreen_canvas, const int li
 			int g = buffer[5];
 			int b = buffer[6];
 
-			if (x < W && y < H)
-				pf -> setPixel(x, y, r, g, b);
+			pf -> setPixel(x, y, r, g, b);
 		}
 
 		line_lock.lock();
@@ -342,9 +341,9 @@ void udp_textmsgs_handler(const FrameCanvas *const offscreen_canvas, const int l
 	int fd = make_socket(listen_port);
 
 	for(;;) {
-		char buffer[4096];
+		char buffer[65536];
 		struct sockaddr_in peer;
-		socklen_t peer_len = sizeof(buffer) - 1;
+		socklen_t peer_len = sizeof(peer);
 
 		printf("\nWaiting for message\n");
 
