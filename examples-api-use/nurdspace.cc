@@ -45,7 +45,64 @@ static bool FullSaturation(const Color &c) {
 		&& (c.b == 0 || c.b == 255);
 }
 
-void blit(FrameCanvas *const canvas, const textImage *const in, const int target_x, const int target_y, int source_x, int source_y, const int source_w, const int source_h)
+class frame
+{
+private:
+	const int w, h, nb;
+	uint8_t *pixels;
+
+public:
+	frame(const int w, const int h) : w(w), h(h), nb(w * h * 3) {
+		pixels = (uint8_t *)malloc(nb);
+	}
+
+	int width() const { return w; }
+
+	int height() const { return h; }
+
+	void setPixel(int x, int y, int r, int g, int b) {
+		if (x < 0 || y < 0 || x >= w || y >= h)
+			return;
+
+		int o = y * w * 3 + x * 3;
+
+		pixels[o + 0] = r;
+		pixels[o + 1] = g;
+		pixels[o + 2] = b;
+	}
+
+	uint8_t *getLow() const { return pixels; }
+
+	void setContents(const frame & in) {
+		// FIXME handle different dimensions
+
+		memcpy(pixels, in.getLow(), nb);
+	}
+
+	void clear() {
+		memset(pixels, 0x00, nb);
+	}
+
+	void fade() {
+		for(int i=0; i<nb; i++)
+			pixels[i] = (pixels[i] * 123) / 124;
+	}
+
+	void put(FrameCanvas *const offscreen_canvas) {
+		for(int y=0; y<h; y++) {
+			for(int x=0; x<w; x++) {
+				int o = y * w * 3 + x * 3;
+
+				offscreen_canvas -> SetPixel(x, y, pixels[o + 0], pixels[o + 1], pixels[o + 2]);
+			}
+		}
+	}
+
+};
+
+frame *work = NULL;
+
+void blit(frame *const work, const textImage *const in, const int target_x, const int target_y, int source_x, int source_y, const int source_w, const int source_h)
 {
 	int endx = source_x + source_w;
 	if (endx > in->getW())
@@ -75,13 +132,13 @@ void blit(FrameCanvas *const canvas, const textImage *const in, const int target
 			if (ty < 0)
 				continue;
 
-			if (tx >= canvas->width())
+			if (tx >= work -> width())
 				continue;
 
-			if (ty >= canvas->height())
+			if (ty >= work -> height())
 				continue;
 
-			canvas -> SetPixel(tx, ty, buffer[offset_source + 0], buffer[offset_source + 1], buffer[offset_source + 2]);
+			work -> setPixel(tx, ty, buffer[offset_source + 0], buffer[offset_source + 1], buffer[offset_source + 2]);
 		}
 	}
 }
@@ -123,8 +180,8 @@ int x_orig = 0, y_orig = 0;
 int x = x_orig;
 int y = y_orig;
 bool endOfLine = false;
-time_t pixelflut_end = 0;
-uint8_t *pixelflutbuf = NULL;
+
+frame *pf = NULL;
 
 int fromhex(int c)
 {
@@ -134,18 +191,6 @@ int fromhex(int c)
 		return c - 'A' + 10;
 
 	return c - '0';
-}
-
-void putPixelBuf(FrameCanvas *const offscreen_canvas) {
-	const int W = offscreen_canvas -> width(), H = offscreen_canvas -> height();
-
-	for(int y=0; y<H; y++) {
-		for(int x=0; x<W; x++) {
-			int o = y * W * 3 + x * 3;
-
-			offscreen_canvas -> SetPixel(x, y, pixelflutbuf[o + 0], pixelflutbuf[o + 1], pixelflutbuf[o + 2]);
-		}
-	}
 }
 
 void udp_pixelflut_ascii_handler(FrameCanvas *const offscreen_canvas, const int listen_port)
@@ -171,7 +216,7 @@ void udp_pixelflut_ascii_handler(FrameCanvas *const offscreen_canvas, const int 
 
 		buffer[n] = 0x00;
 
-int cnt = 0;
+		int cnt = 0;
 
 		char *p = buffer;
 		while(p) {
@@ -195,16 +240,14 @@ int cnt = 0;
 				break;
 			//printf("%d %d %s\n", cnt, p[0], p);
 
-cnt++;
+			cnt++;
 
 			char *rgb = space + 1;
 			int r = (fromhex(rgb[0]) << 4) + fromhex(rgb[1]);
 			int g = (fromhex(rgb[2]) << 4) + fromhex(rgb[3]);
 			int b = (fromhex(rgb[4]) << 4) + fromhex(rgb[5]);
 
-			pixelflutbuf[ty * W * 3 + tx * 3 + 0] = r;
-			pixelflutbuf[ty * W * 3 + tx * 3 + 1] = g;
-			pixelflutbuf[ty * W * 3 + tx * 3 + 2] = b;
+			pf -> setPixel(tx, ty, r, g, b);
 
 			if (lf)
 				p = lf + 1;
@@ -217,10 +260,6 @@ cnt++;
 
 		delete ti_idle;
 		ti_idle = NULL;
-
-		putPixelBuf(offscreen_canvas);
-
-		pixelflut_end = time(NULL) + 1;
 
 		line_lock.unlock();
 	}
@@ -258,23 +297,14 @@ void udp_pixelflut_bin_handler(FrameCanvas *const offscreen_canvas, const int li
 			int g = buffer[5];
 			int b = buffer[6];
 
-			if (x < W && y < H) {
-				int o = y * W * 3 + x * 3;
-
-				pixelflutbuf[o + 0] = r;
-				pixelflutbuf[o + 1] = g;
-				pixelflutbuf[o + 2] = b;
-			}
+			if (x < W && y < H)
+				pf -> setPixel(x, y, r, g, b);
 		}
 
 		line_lock.lock();
 
 		delete ti_idle;
 		ti_idle = NULL;
-
-		putPixelBuf(offscreen_canvas);
-
-		pixelflut_end = time(NULL) + 1;
 
 		line_lock.unlock();
 	}
@@ -367,9 +397,9 @@ void udp_textmsgs_handler(const FrameCanvas *const offscreen_canvas, const int l
 
 		x = offscreen_canvas->width();
 
-		int np = offscreen_canvas -> width() * offscreen_canvas -> height() * 3;
-		memset(pixelflutbuf, 0x00, np);
 		line_lock.unlock();
+
+		pf -> clear();
 	}
 }
 
@@ -416,9 +446,10 @@ int main(int argc, char *argv[]) {
 	// Create a new canvas to be used with led_matrix_swap_on_vsync
 	FrameCanvas *offscreen_canvas = canvas->CreateFrameCanvas();
 
-	font::init_fonts();
+	work = new frame(offscreen_canvas->width(), offscreen_canvas->height());
+	pf = new frame(offscreen_canvas->width(), offscreen_canvas->height());
 
-	pixelflutbuf = (uint8_t *)calloc(1, canvas->width() * canvas->height() * 3);
+	font::init_fonts();
 
 	std::thread t(udp_textmsgs_handler, offscreen_canvas, listen_port);
 
@@ -434,14 +465,14 @@ int main(int argc, char *argv[]) {
 		time_t now = time(NULL);
 
 		if (line_lock.try_lock()) {
+			work -> setContents(*pf);
+
 			textImage *use_line = choose_ti_higher_prio(&ti_cur);
 			if (!use_line)
 				use_line = ti_idle;
 			bool is_idle = use_line ? use_line -> idleStatus() : false;
 
 			if (use_line) {
-				//putPixelBuf(offscreen_canvas);
-
 				if (use_line->flashStatus()) {
 					printf("FLASH\n");
 					for(int i=0; i<5; i++) {
@@ -458,8 +489,7 @@ int main(int argc, char *argv[]) {
 
 				int length = use_line->getW();
 
-				blit(offscreen_canvas, use_line, x, 0, 0, 0, use_line->getW(), offscreen_canvas->height());
-				offscreen_canvas = canvas->SwapOnVSync(offscreen_canvas);
+				blit(work, use_line, x, 0, 0, 0, use_line->getW(), offscreen_canvas->height());
 
 				if (is_idle) { // scroll 1 pixel every second in idle mode
 					if (now - ss) {
@@ -477,10 +507,11 @@ int main(int argc, char *argv[]) {
 				use_line->decreaseDurationLeft(SLEEP_N);
 			}
 
-			offscreen_canvas = canvas->SwapOnVSync(offscreen_canvas);
-
 			line_lock.unlock();
 		}
+
+		work -> put(offscreen_canvas);
+		offscreen_canvas = canvas->SwapOnVSync(offscreen_canvas);
 
 		uint64_t render_took = get_ts() - render_start;
 		int64_t sleep_us = SLEEP_N - render_took;
@@ -498,8 +529,6 @@ int main(int argc, char *argv[]) {
 					delete ti_cur.at(idx);
 					ti_cur.erase(ti_cur.begin() + idx);
 
-					offscreen_canvas = canvas->SwapOnVSync(offscreen_canvas);
-
 					x = 8; // 8 seconds before idle goes off-screen
 				}
 				else {
@@ -507,14 +536,9 @@ int main(int argc, char *argv[]) {
 				}
 			}
 
-			int n = canvas -> width() * canvas -> height() * 3;
-			for(int i=0; i<n; i++)
-				pixelflutbuf[i] = (int(pixelflutbuf[i]) * 123) / 124;
-			putPixelBuf(offscreen_canvas);
-			offscreen_canvas = canvas->SwapOnVSync(offscreen_canvas);
-			offscreen_canvas = canvas->SwapOnVSync(offscreen_canvas);
-
 			line_lock.unlock();
+
+			pf -> fade();
 		}
 	}
 
