@@ -138,7 +138,11 @@ void blit(frame *const work, const textImage *const in, const int target_x, cons
 			if (ty >= work -> height())
 				continue;
 
-			work -> setPixel(tx, ty, buffer[offset_source + 0], buffer[offset_source + 1], buffer[offset_source + 2]);
+			int r = buffer[offset_source + 0];
+			int g = buffer[offset_source + 1];
+			int b = buffer[offset_source + 2];
+
+			work -> setPixel(tx, ty, r, g, b);
 		}
 	}
 }
@@ -293,9 +297,9 @@ void udp_pixelflut_bin_handler(FrameCanvas *const offscreen_canvas, const int li
 		for(int i=2; i<n; i += inc) {
 			int x = (buffer[i + 1] << 8) | buffer[i + 0];
 			int y = (buffer[i + 3] << 8) | buffer[i + 2];
-			int r = buffer[4];
-			int g = buffer[5];
-			int b = buffer[6];
+			int r = buffer[i + 4];
+			int g = buffer[i + 5];
+			int b = buffer[i + 6];
 
 			pf -> setPixel(x, y, r, g, b);
 		}
