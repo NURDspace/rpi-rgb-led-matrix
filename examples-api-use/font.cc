@@ -89,12 +89,12 @@ void font::draw_bitmap(const FT_Bitmap *const bitmap, const int target_height, c
 			if (o + 2 >= bytes)
 				continue;
 
-			if (pixel_v) {
+			if (r || g || b) {
 				result[o + 0] = (pixel_v * r) >> 8;
 				result[o + 1] = (pixel_v * g) >> 8;
 				result[o + 2] = (pixel_v * b) >> 8;
 			}
-			else {
+			else if (bcr || bcg || bcb) {
 				result[o + 0] = bcr;
 				result[o + 1] = bcg;
 				result[o + 2] = bcb;
