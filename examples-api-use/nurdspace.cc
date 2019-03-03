@@ -57,6 +57,10 @@ class frame
 			pixels = (uint8_t *)malloc(nb);
 		}
 
+		~frame() {
+			free(pixels);
+		}
+
 		int width() const { return w; }
 
 		int height() const { return h; }
@@ -504,9 +508,8 @@ int main(int argc, char *argv[]) {
 	signal(SIGINT, InterruptHandler);
 	signal(SIGUSR1, InterruptHandler);
 
-	printf("CTRL-C for exit.\n");
+	printf("CTRL-C for exit\n");
 
-	// Create a new canvas to be used with led_matrix_swap_on_vsync
 	FrameCanvas *offscreen_canvas = canvas->CreateFrameCanvas();
 
 	work = new frame(offscreen_canvas->width(), offscreen_canvas->height());
