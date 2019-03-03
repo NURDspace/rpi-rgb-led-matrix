@@ -144,6 +144,16 @@ void font::uninit_fonts()
 	pthread_mutex_unlock(&freetype2_lock);
 }
 
+std::string substr(UChar32 *const utf32_str, const int idx, const int n)
+{
+	std::string out;
+
+	for(int i=idx; i<idx+n; i++)
+		out += utf32_str[i];
+
+	return out;
+}
+
 font::font(const std::string & filename, const std::string & text, const int target_height, const bool antialias) {
 	// this sucks a bit but apparently freetype2 is not thread safe
 	pthread_mutex_lock(&freetype2_lock);
@@ -220,15 +230,16 @@ font::font(const std::string & filename, const std::string & text, const int tar
 
 		if (c == '$')
 		{
-			const std::string::size_type eo = text.find('$', ++n);
-			if (eo == std::string::npos)
+			std::string::size_type eo = n + 1;
+			while(utf32_str[eo] != '$' && eo != utf32_len)
+				eo++;
+			if (eo == utf32_len)
 				break;
 
 			n = eo + 1;
 			continue;
 		}
 
-just_draw1:
 		int glyph_index = FT_Get_Char_Index(face, c);
 
 		FT_Vector akern = { 0, 0 };
@@ -250,7 +261,7 @@ just_draw1:
 		max_descender = std::max(max_descender, int(face -> glyph -> metrics.height - face -> glyph -> metrics.horiBearingY));
 
 #ifdef DEBUG
-		printf("char %c w×h = %.1fx%.1f ascender %.1f bearingx %.1f bitmap: %dx%d left/top: %d,%d akern %ld,%ld\n",
+		printf("char %c w/h = %.1fx%.1f ascender %.1f bearingx %.1f bitmap: %dx%d left/top: %d,%d akern %ld,%ld\n",
 				c,
 				face -> glyph -> metrics.horiAdvance / 64.0, face -> glyph -> metrics.height / 64.0, // wxh
 				face -> glyph -> metrics.horiBearingY / 64.0, // ascender
@@ -294,17 +305,19 @@ just_draw1:
 	double x = 0.0;
 
 	prev_glyph_index = -1;
-	for(unsigned int n = 0; n < utf32_len;)
+	for(int n = 0; n < utf32_len;)
 	{
-		const int c = utf32_str[n];
+		const int c = utf32_str[n++];
 
 		if (c == '$')
 		{
-			const std::string::size_type eo = text.find('$', ++n);
-			if (eo == std::string::npos)
+			std::string::size_type eo = n;
+			while(utf32_str[eo] != '$' && eo != utf32_len)
+				eo++;
+			if (eo == utf32_len)
 				break;
 
-			char c2 = text.at(n++);
+			const char c2 = utf32_str[n++];
 
 			if (c2 == 'i')
 				invert = !invert;
@@ -319,12 +332,12 @@ just_draw1:
 				want_flash = true;
 
 			else if (c2 == 'd') {
-				std::string temp = text.substr(n, eo - n);
+				std::string temp = substr(utf32_str, n, eo - n);
 				duration = int64_t(atof(temp.c_str()) * 1000L * 1000L);
 			}
 
 			else if (c2 == 'p') {
-				std::string temp = text.substr(n, eo - n);
+				std::string temp = substr(utf32_str, n, eo - n);
 				prio = atoi(temp.c_str());
 			}
 
@@ -335,14 +348,16 @@ just_draw1:
 				transparent = !transparent;
 
 			else if (c2 == 'C') {
-				hex_str_to_rgb(text.substr(n, 6), &color_r, &color_g, &color_b);
+				std::string temp = substr(utf32_str, n, 6);
+				hex_str_to_rgb(temp, &color_r, &color_g, &color_b);
 			}
 
 			else if (c2 == 'B') {
-				hex_str_to_rgb(text.substr(n, 6), &bcr, &bcg, &bcb);
+				std::string temp = substr(utf32_str, n, 6);
+				hex_str_to_rgb(temp, &bcr, &bcg, &bcb);
 			}
 			else {
-				printf("%c not understood\n", c2);
+				printf("@%d: %c not understood (%c)\n", n, c2, c);
 				break;
 			}
 
@@ -360,18 +375,13 @@ just_draw1:
 		}
 
 		if (FT_Load_Glyph(face, glyph_index, FT_LOAD_RENDER))
-		{
-			n++;
 			continue;
-		}
 
 		draw_bitmap(&slot->bitmap, target_height, x / 64.0, max_ascender / 64.0 - slot -> bitmap_top, color_r, color_g, color_b, invert, underline, rainbow, bcr, bcg, bcb);
 
 		x += face -> glyph -> metrics.horiAdvance;
 
 		prev_glyph_index = glyph_index;
-
-		n++;
 	}
 
 	delete [] utf32_str;
@@ -438,34 +448,3 @@ std::string find_font_by_name(const std::string & font_name, const std::string &
 
 	return fontFile;
 }
-
-#if defined(DEBUG) || defined(DEBUG_IMG)
-int main(int argc, char *argv[])
-{
-	printf("%s\n", find_font_by_name("Arial").c_str());
-
-	const int h = 100;
-	font f(FONT, "_g$iq$ite#12ff56$$$ut$u1$i2$i3$$", h);
-
-	uint8_t *p = NULL;
-	int w = 0;
-	f.getImage(&w, &p);
-
-#ifdef DEBUG_IMG
-	printf("P6 %d %d %d\n", w, h, 255);
-
-	for(int y=0; y<h; y++)
-	{
-		for(int x=0; x<w; x++)
-		{
-			int o = y * w * 3 + x * 3;
-			printf("%c%c%c", p[o + 0], p[o + 1], p[o + 2]);
-		}
-	}
-#else
-	printf("%p %dx%d\n", p, w, h);
-#endif
-
-	return 0;
-}
-#endif
