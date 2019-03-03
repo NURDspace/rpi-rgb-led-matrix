@@ -184,6 +184,7 @@ int x_orig = 0, y_orig = 0;
 int x = x_orig;
 int y = y_orig;
 bool endOfLine = false;
+time_t pf_last = 0;
 
 frame *pf = NULL;
 
@@ -264,6 +265,7 @@ void udp_pixelflut_ascii_handler(FrameCanvas *const offscreen_canvas, const int 
 
 		delete ti_idle;
 		ti_idle = NULL;
+		pf_last = time(NULL) + 1;
 
 		line_lock.unlock();
 	}
@@ -308,6 +310,7 @@ void udp_pixelflut_bin_handler(FrameCanvas *const offscreen_canvas, const int li
 
 		delete ti_idle;
 		ti_idle = NULL;
+		pf_last = time(NULL) + 1;
 
 		line_lock.unlock();
 	}
@@ -541,7 +544,8 @@ int main(int argc, char *argv[]) {
 
 			line_lock.unlock();
 
-			pf -> fade();
+			if (time(NULL) > pf_last)
+				pf -> fade();
 		}
 	}
 
