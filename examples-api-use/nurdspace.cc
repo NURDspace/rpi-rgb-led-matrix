@@ -6,6 +6,7 @@
 #include <string>
 #include <thread>
 #include <mutex>
+#include <poll.h>
 #include <getopt.h>
 #include <signal.h>
 #include <stdio.h>
@@ -197,6 +198,16 @@ int fromhex(int c)
 	return c - '0';
 }
 
+bool wait_for_data(const int fd)
+{
+	struct pollfd pf[1] = { { fd, POLLIN, 0 } };
+
+	if (poll(pf, 1, 100) == 1)
+		return true;
+
+	return false;
+}
+
 void udp_pixelflut_ascii_handler(FrameCanvas *const offscreen_canvas, const int listen_port, const char *const interface)
 {
 	int fd = make_socket(interface, listen_port);
@@ -207,10 +218,13 @@ void udp_pixelflut_ascii_handler(FrameCanvas *const offscreen_canvas, const int 
 
 	printf("resolution pixelflut_ascii: %dx%d, port %d\n", W, H, listen_port);
 
-	for(;;) {
+	for(;!interrupt_received;) {
 		char buffer[65536];
 		struct sockaddr_in peer;
 		socklen_t peer_len = sizeof(peer);
+
+		if (!wait_for_data(fd))
+			continue;
 
 		ssize_t n = recvfrom(fd, buffer, sizeof buffer - 1, 0, (struct sockaddr *)&peer, &peer_len);
 		if (n == -1) {
@@ -280,10 +294,13 @@ void udp_pixelflut_bin_handler(FrameCanvas *const offscreen_canvas, const int li
 
 	printf("resolution pixelflut_bin: %dx%d, port %d\n", W, H, listen_port);
 
-	for(;;) {
+	for(;!interrupt_received;) {
 		char buffer[65536];
 		struct sockaddr_in peer;
 		socklen_t peer_len = sizeof(peer);
+
+		if (!wait_for_data(fd))
+			continue;
 
 		ssize_t n = recvfrom(fd, buffer, sizeof buffer - 1, 0, (struct sockaddr *)&peer, &peer_len);
 		if (n == -1) {
@@ -348,12 +365,13 @@ void udp_textmsgs_handler(const FrameCanvas *const offscreen_canvas, const int l
 
 	printf("text, listening on %s:%d\n", interface, listen_port);
 
-	for(;;) {
+	for(;!interrupt_received;) {
 		char buffer[65536];
 		struct sockaddr_in peer;
 		socklen_t peer_len = sizeof(peer);
 
-		printf("\nWaiting for message\n");
+		if (!wait_for_data(fd))
+			continue;
 
 		ssize_t n = recvfrom(fd, buffer, sizeof buffer, 0, (struct sockaddr *)&peer, &peer_len);
 		if (n == -1) {
@@ -435,7 +453,7 @@ void pixelflut_announcer(const int port, const char *const interface, const int 
 	char sbuf[4096];
 	int len = snprintf(sbuf, sizeof(sbuf), "pixelvloed:%d %s:%d %d*%d", PROTOCOL_VERSION, interface, port, width, height);
 
-	for(;;) {
+	for(;!interrupt_received;) {
 		if (sendto(fd, sbuf, len, 0, (struct sockaddr*) &send_addr, sizeof send_addr) == -1)
 			perror("send");
 
@@ -484,6 +502,7 @@ int main(int argc, char *argv[]) {
 
 	signal(SIGTERM, InterruptHandler);
 	signal(SIGINT, InterruptHandler);
+	signal(SIGUSR1, InterruptHandler);
 
 	printf("CTRL-C for exit.\n");
 
@@ -589,8 +608,19 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
-	// Finished. Shut down the RGB matrix.
+	t5.join();
+	t4.join();
+	t3.join();
+	t.join();
+
+	for(size_t idx=0; idx < ti_cur.size(); idx++)
+		delete ti_cur.at(idx);
+
+	delete pf;
+	delete work;
+
 	canvas->Clear();
+
 	delete canvas;
 
 	return 0;
