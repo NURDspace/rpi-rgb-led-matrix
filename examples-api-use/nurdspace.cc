@@ -107,7 +107,7 @@ class frame
 
 frame *work = NULL;
 
-void blit(frame *const work, const textImage *const in, const int target_x, const int target_y, int source_x, int source_y, const int source_w, const int source_h)
+void blit(frame *const work, const textImage *const in, const int target_x, const int target_y, int source_x, int source_y, const int source_w, const int source_h, const bool transparent)
 {
 	int endx = source_x + source_w;
 	if (endx > in->getW())
@@ -147,7 +147,8 @@ void blit(frame *const work, const textImage *const in, const int target_x, cons
 			int g = buffer[offset_source + 1];
 			int b = buffer[offset_source + 2];
 
-			work -> setPixel(tx, ty, r, g, b);
+			if (!transparent || (transparent && (r || g || b)))
+				work -> setPixel(tx, ty, r, g, b);
 		}
 	}
 }
@@ -557,7 +558,7 @@ int main(int argc, char *argv[]) {
 
 				int length = use_line->getW();
 
-				blit(work, use_line, x, 0, 0, 0, use_line->getW(), offscreen_canvas->height());
+				blit(work, use_line, x, 0, 0, 0, use_line->getW(), offscreen_canvas->height(), use_line->getTransparent());
 
 				if (is_idle) { // scroll 1 pixel every second in idle mode
 					if (now - ss) {

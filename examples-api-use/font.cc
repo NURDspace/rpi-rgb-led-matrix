@@ -89,12 +89,12 @@ void font::draw_bitmap(const FT_Bitmap *const bitmap, const int target_height, c
 			if (o + 2 >= bytes)
 				continue;
 
-			if (r || g || b) {
+			if (pixel_v) {
 				result[o + 0] = (pixel_v * r) >> 8;
 				result[o + 1] = (pixel_v * g) >> 8;
 				result[o + 2] = (pixel_v * b) >> 8;
 			}
-			else if (bcr || bcg || bcb) {
+			else {
 				result[o + 0] = bcr;
 				result[o + 1] = bcg;
 				result[o + 2] = bcb;
@@ -279,6 +279,7 @@ just_draw1:
 	prio = 0;
 	org = text;
 	scroll = true;
+	transparent = false;
 
 	// target_height!!
 	bytes = w * target_height * 3;
@@ -329,6 +330,9 @@ just_draw1:
 
 			else if (c2 == 'r')
 				rainbow = !rainbow;
+
+			else if (c2 == 'T')
+				transparent = !transparent;
 
 			else if (c2 == 'C') {
 				hex_str_to_rgb(text.substr(n, 6), &color_r, &color_g, &color_b);
@@ -382,7 +386,7 @@ font::~font()
 
 textImage * font::getImage()
 {
-	textImage *ti = new textImage(result, this -> w, this -> h, want_flash, is_idle, duration, prio, org, scroll);
+	textImage *ti = new textImage(result, this -> w, this -> h, want_flash, is_idle, duration, prio, org, scroll, transparent);
 	result = NULL; // transfer ownership of buffer
 	return ti;
 }
