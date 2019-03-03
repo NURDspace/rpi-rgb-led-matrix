@@ -147,7 +147,7 @@ void blit(frame *const work, const textImage *const in, const int target_x, cons
 	}
 }
 
-int make_socket(const uint16_t port)
+int make_socket(const char *const interface, const uint16_t port)
 {
 	/* Create the socket. */
 	int sock = socket(PF_INET, SOCK_DGRAM, 0);
@@ -166,10 +166,9 @@ int make_socket(const uint16_t port)
 	/* Give the socket a name. */
 	struct sockaddr_in name;
 	name.sin_family = AF_INET;
-	name.sin_port = htons (port);
-	name.sin_addr.s_addr = htonl (INADDR_ANY);
-	if (bind (sock, (struct sockaddr *) &name, sizeof (name)) < 0)
-	{
+	name.sin_port = htons(port);
+	name.sin_addr.s_addr = inet_addr(interface);
+	if (bind(sock, (struct sockaddr *) &name, sizeof (name)) < 0) {
 		perror ("bind");
 		exit (EXIT_FAILURE);
 	}
@@ -198,9 +197,9 @@ int fromhex(int c)
 	return c - '0';
 }
 
-void udp_pixelflut_ascii_handler(FrameCanvas *const offscreen_canvas, const int listen_port)
+void udp_pixelflut_ascii_handler(FrameCanvas *const offscreen_canvas, const int listen_port, const char *const interface)
 {
-	int fd = make_socket(listen_port);
+	int fd = make_socket(interface, listen_port);
 
 	line_lock.lock();
 	const int W = offscreen_canvas -> width(), H = offscreen_canvas -> height();
@@ -271,9 +270,9 @@ void udp_pixelflut_ascii_handler(FrameCanvas *const offscreen_canvas, const int 
 	}
 }
 
-void udp_pixelflut_bin_handler(FrameCanvas *const offscreen_canvas, const int listen_port)
+void udp_pixelflut_bin_handler(FrameCanvas *const offscreen_canvas, const int listen_port, const char *const interface)
 {
-	int fd = make_socket(listen_port);
+	int fd = make_socket(interface, listen_port);
 
 	line_lock.lock();
 	const int W = offscreen_canvas -> width(), H = offscreen_canvas -> height();
@@ -343,9 +342,11 @@ ssize_t choose_ti_same_prio(std::vector<textImage *> *const elements, const int 
 	return -1;
 }
 
-void udp_textmsgs_handler(const FrameCanvas *const offscreen_canvas, const int listen_port)
+void udp_textmsgs_handler(const FrameCanvas *const offscreen_canvas, const int listen_port, const char *const interface)
 {
-	int fd = make_socket(listen_port);
+	int fd = make_socket(interface, listen_port);
+
+	printf("text, listening on %s:%d\n", interface, listen_port);
 
 	for(;;) {
 		char buffer[65536];
@@ -409,7 +410,7 @@ void udp_textmsgs_handler(const FrameCanvas *const offscreen_canvas, const int l
 	}
 }
 
-void pixelflut_announcer(const int port, const int width, const int height)
+void pixelflut_announcer(const int port, const char *const interface, const int width, const int height)
 {
 	struct sockaddr_in send_addr;
 	int trueflag = 1, count = 0;
@@ -429,12 +430,10 @@ void pixelflut_announcer(const int port, const int width, const int height)
 	send_addr.sin_port = (in_port_t) htons(5006);
 	send_addr.sin_addr.s_addr = htonl(INADDR_BROADCAST);
 
-	constexpr char PROTOCOL_PREAMBLE[] = "pixelvloed";
 	constexpr int PROTOCOL_VERSION = 1;
 
 	char sbuf[4096];
-	int len = snprintf(sbuf, sizeof(sbuf), "%s:%f %s:%d %d*%d",
-			PROTOCOL_PREAMBLE, PROTOCOL_VERSION, "0.0.0.0", port, width, height);
+	int len = snprintf(sbuf, sizeof(sbuf), "pixelvloed:%d %s:%d %d*%d", PROTOCOL_VERSION, interface, port, width, height);
 
 	for(;;) {
 		if (sendto(fd, sbuf, len, 0, (struct sockaddr*) &send_addr, sizeof send_addr) == -1)
@@ -457,10 +456,12 @@ int main(int argc, char *argv[]) {
 	x_orig = (matrix_options.chain_length * matrix_options.cols) + 5;
 	y_orig = 0;
 	int brightness = 100, listen_port = 5001, listen_port3 = 5003, listen_port4 = 5004;
+	const char *interface = "127.0.0.1";
 
 	int opt;
-	while ((opt = getopt(argc, argv, "t:b:x:y:")) != -1) {
+	while ((opt = getopt(argc, argv, "i:t:b:x:y:")) != -1) {
 		switch (opt) {
+			case 'i': interface = optarg; break;
 			case 't': listen_port = atoi(optarg); break;
 			case 'b': brightness = atoi(optarg); break;
 			case 'x': x_orig = atoi(optarg); break;
@@ -494,13 +495,13 @@ int main(int argc, char *argv[]) {
 
 	font::init_fonts();
 
-	std::thread t(udp_textmsgs_handler, offscreen_canvas, listen_port);
+	std::thread t(udp_textmsgs_handler, offscreen_canvas, listen_port, interface);
 
-	std::thread t3(udp_pixelflut_ascii_handler, offscreen_canvas, listen_port3);
+	std::thread t3(udp_pixelflut_ascii_handler, offscreen_canvas, listen_port3, interface);
 
-	std::thread t4(udp_pixelflut_bin_handler, offscreen_canvas, listen_port4);
+	std::thread t4(udp_pixelflut_bin_handler, offscreen_canvas, listen_port4, interface);
 
-	std::thread t5(pixelflut_announcer, listen_port4, offscreen_canvas->width(), offscreen_canvas->height());
+	std::thread t5(pixelflut_announcer, listen_port4, interface, offscreen_canvas->width(), offscreen_canvas->height());
 
 	time_t ss = 0;
 
