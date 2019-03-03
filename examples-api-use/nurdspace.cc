@@ -47,56 +47,56 @@ static bool FullSaturation(const Color &c) {
 
 class frame
 {
-private:
-	const int w, h, nb;
-	uint8_t *pixels;
+	private:
+		const int w, h, nb;
+		uint8_t *pixels;
 
-public:
-	frame(const int w, const int h) : w(w), h(h), nb(w * h * 3) {
-		pixels = (uint8_t *)malloc(nb);
-	}
+	public:
+		frame(const int w, const int h) : w(w), h(h), nb(w * h * 3) {
+			pixels = (uint8_t *)malloc(nb);
+		}
 
-	int width() const { return w; }
+		int width() const { return w; }
 
-	int height() const { return h; }
+		int height() const { return h; }
 
-	void setPixel(int x, int y, int r, int g, int b) {
-		if (x < 0 || y < 0 || x >= w || y >= h)
-			return;
+		void setPixel(int x, int y, int r, int g, int b) {
+			if (x < 0 || y < 0 || x >= w || y >= h)
+				return;
 
-		int o = y * w * 3 + x * 3;
+			int o = y * w * 3 + x * 3;
 
-		pixels[o + 0] = r;
-		pixels[o + 1] = g;
-		pixels[o + 2] = b;
-	}
+			pixels[o + 0] = r;
+			pixels[o + 1] = g;
+			pixels[o + 2] = b;
+		}
 
-	uint8_t *getLow() const { return pixels; }
+		uint8_t *getLow() const { return pixels; }
 
-	void setContents(const frame & in) {
-		// FIXME handle different dimensions
+		void setContents(const frame & in) {
+			// FIXME handle different dimensions
 
-		memcpy(pixels, in.getLow(), nb);
-	}
+			memcpy(pixels, in.getLow(), nb);
+		}
 
-	void clear() {
-		memset(pixels, 0x00, nb);
-	}
+		void clear() {
+			memset(pixels, 0x00, nb);
+		}
 
-	void fade() {
-		for(int i=0; i<nb; i++)
-			pixels[i] = (pixels[i] * 123) / 124;
-	}
+		void fade() {
+			for(int i=0; i<nb; i++)
+				pixels[i] = (pixels[i] * 123) / 124;
+		}
 
-	void put(FrameCanvas *const offscreen_canvas) {
-		for(int y=0; y<h; y++) {
-			for(int x=0; x<w; x++) {
-				int o = y * w * 3 + x * 3;
+		void put(FrameCanvas *const offscreen_canvas) {
+			for(int y=0; y<h; y++) {
+				for(int x=0; x<w; x++) {
+					int o = y * w * 3 + x * 3;
 
-				offscreen_canvas -> SetPixel(x, y, pixels[o + 0], pixels[o + 1], pixels[o + 2]);
+					offscreen_canvas -> SetPixel(x, y, pixels[o + 0], pixels[o + 1], pixels[o + 2]);
+				}
 			}
 		}
-	}
 
 };
 
@@ -409,6 +409,43 @@ void udp_textmsgs_handler(const FrameCanvas *const offscreen_canvas, const int l
 	}
 }
 
+void pixelflut_announcer(const int port, const int width, const int height)
+{
+	struct sockaddr_in send_addr;
+	int trueflag = 1, count = 0;
+
+	int fd;
+	if ((fd = socket(AF_INET, SOCK_DGRAM, 0)) == -1)
+		perror("socket");
+
+	if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &trueflag, sizeof trueflag) == -1)
+		perror("setsockopt");
+
+	if (setsockopt(fd, SOL_SOCKET, SO_BROADCAST, &trueflag, sizeof trueflag) == -1)
+		perror("setsockopt");
+
+	memset(&send_addr, 0, sizeof send_addr);
+	send_addr.sin_family = AF_INET;
+	send_addr.sin_port = (in_port_t) htons(5006);
+	send_addr.sin_addr.s_addr = htonl(INADDR_BROADCAST);
+
+	constexpr char PROTOCOL_PREAMBLE[] = "pixelvloed";
+	constexpr int PROTOCOL_VERSION = 1;
+
+	char sbuf[4096];
+	int len = snprintf(sbuf, sizeof(sbuf), "%s:%f %s:%d %d*%d",
+			PROTOCOL_PREAMBLE, PROTOCOL_VERSION, "0.0.0.0", port, width, height);
+
+	for(;;) {
+		if (sendto(fd, sbuf, len, 0, (struct sockaddr*) &send_addr, sizeof send_addr) == -1)
+			perror("send");
+
+		sleep(1);
+	}
+
+	close(fd);
+}
+
 int main(int argc, char *argv[]) {
 	RGBMatrix::Options matrix_options;
 	rgb_matrix::RuntimeOptions runtime_opt;
@@ -462,6 +499,8 @@ int main(int argc, char *argv[]) {
 	std::thread t3(udp_pixelflut_ascii_handler, offscreen_canvas, listen_port3);
 
 	std::thread t4(udp_pixelflut_bin_handler, offscreen_canvas, listen_port4);
+
+	std::thread t5(pixelflut_announcer, listen_port4, offscreen_canvas->width(), offscreen_canvas->height());
 
 	time_t ss = 0;
 
