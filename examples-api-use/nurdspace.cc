@@ -259,14 +259,11 @@ void tcp_pixelflut_ascii_handler_do(const int fd)
 
 		buffer[o] = 0x00;
 		char *lf = strchr(buffer, '\n');
-		if (!lf) {
-printf("no lf\n");
+		if (!lf)
 			continue;
-}
 
 		*lf = 0x00;
 
-printf("proces %s\n", buffer);
 		if (!handle_PX_command(buffer))
 			break;
 
