@@ -35,19 +35,19 @@ public:
 		delete [] buffer;
 	}
 
-	const int getW() const { return w; }
-	const int getH() const { return h; }
+	int getW() const { return w; }
+	int getH() const { return h; }
 	const uint8_t * getBuffer() const { return buffer; }
-	const bool flashStatus() { bool rc = wantFlash; wantFlash = false; return rc; }
-	const bool idleStatus() const { return isIdle; }
+	bool flashStatus() { bool rc = wantFlash; wantFlash = false; return rc; }
+	bool idleStatus() const { return isIdle; }
 	int64_t getDurationLeft() const { return durationLeft; }
 	void decreaseDurationLeft(const uint64_t hm) { durationLeft -= hm; }
 	bool getEndOfLine() const { return endOfLine; }
 	void setEndOfLine() { endOfLine = true; }
-	const int getPrio() const { return prio; }
+	int getPrio() const { return prio; }
 	const std::string & getOrg() const { return org; }
-	const bool getScrollRequired() const { return scroll; }
-	const bool getTransparent() const { return transparent; }
+	bool getScrollRequired() const { return scroll; }
+	bool getTransparent() const { return transparent; }
 };
 
 class font {
