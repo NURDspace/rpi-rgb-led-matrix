@@ -243,6 +243,8 @@ void tcp_pixelflut_ascii_handler_do(const int fd)
 	char buffer[4096];
 	int o = 0;
 
+	printf("client thread started %d\n", fd);
+
 	for(;!interrupt_received;) {
 		if (!wait_for_data(fd))
 			continue;
@@ -257,11 +259,14 @@ void tcp_pixelflut_ascii_handler_do(const int fd)
 
 		buffer[o] = 0x00;
 		char *lf = strchr(buffer, '\n');
-		if (!lf)
+		if (!lf) {
+printf("no lf\n");
 			continue;
+}
 
 		*lf = 0x00;
 
+printf("proces %s\n", buffer);
 		if (!handle_PX_command(buffer))
 			break;
 
@@ -276,6 +281,8 @@ void tcp_pixelflut_ascii_handler_do(const int fd)
 			o = 0;
 		}
 	}
+
+	printf("client thread terminating %d\n", fd);
 
 	close(fd);
 }
@@ -307,9 +314,9 @@ void tcp_pixelflut_ascii_handler(FrameCanvas *const offscreen_canvas, const int 
 		char addr[INET_ADDRSTRLEN];
 		inet_ntop(AF_INET, &(peer.sin_addr), addr, INET_ADDRSTRLEN);
 
-		printf("TCP pixelflut connection from %s\n", addr);
+		printf("TCP pixelflut connection from %s: %d\n", addr, new_fd);
 
-		std::thread t(tcp_pixelflut_ascii_handler_do, fd);
+		std::thread t(tcp_pixelflut_ascii_handler_do, new_fd);
 		t.detach();
 	}
 }
