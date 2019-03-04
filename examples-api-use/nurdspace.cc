@@ -212,19 +212,25 @@ bool wait_for_data(const int fd)
 bool handle_PX_command(char *const line)
 {
 	// PX 20 30 ff8800
-	if (line[0] != 'P' || line[1] != 'X')
+	if (line[0] != 'P' || line[1] != 'X') {
+		printf("invalid header\n");
 		return false;
+	}
 
 	int tx = atoi(&line[3]);
 	char *space = strchr(&line[4], ' ');
-	if (!space)
+	if (!space) {
+		printf("short 1\n");
 		return false;
+	}
 
 	int ty = atoi(space + 1);
 
 	space = strchr(space + 1, ' ');
-	if (!space)
+	if (!space) {
+		printf("short 2\n");
 		return false;
+	}
 	//printf("%d %d %s\n", cnt, p[0], p);
 
 	char *rgb = space + 1;
@@ -232,8 +238,10 @@ bool handle_PX_command(char *const line)
 	int g = (fromhex(rgb[2]) << 4) + fromhex(rgb[3]);
 	int b = (fromhex(rgb[4]) << 4) + fromhex(rgb[5]);
 
-	if (r < 0 || g < 0 || b < 0 || r > 255 || g > 255 || b > 255)
+	if (r < 0 || g < 0 || b < 0 || r > 255 || g > 255 || b > 255) {
+		printf("color invalid: %s\n", rgb);
 		return false;
+	}
 
 	return pf -> setPixel(tx, ty, r, g, b);
 }
@@ -249,36 +257,50 @@ void tcp_pixelflut_ascii_handler_do(const int fd)
 		if (!wait_for_data(fd))
 			continue;
 
-		int n = read(fd, &buffer[o], sizeof buffer - o - 1);
-		if (n <= 0)
+		if (o == sizeof buffer) {
+			printf("buffer overflow\n");
 			break;
+		}
+
+		int n = read(fd, &buffer[o], sizeof buffer - o);
+		if (n <= 0) {
+			printf("read error: %d\n", errno);
+			break;
+		}
 
 		o += n;
-		if (o == sizeof buffer - 1)
-			break;
 
 		buffer[o] = 0x00;
-		char *lf = strchr(buffer, '\n');
-		if (!lf)
-			continue;
 
-		*lf = 0x00;
+		for(;;) {
+			char *lf = strchr(buffer, '\n');
+			if (!lf)
+				break;
 
-		if (!handle_PX_command(buffer))
-			break;
+			*lf = 0x00;
 
-		int offset_lf = lf - buffer;
-		int bytes_left = o - (offset_lf + 1);
+			if (!handle_PX_command(buffer)) {
+				printf("invalid PX\n");
+				goto fail;
+			}
 
-		if (bytes_left > 0) {
+			int offset_lf = lf - buffer;
+			int bytes_left = o - (offset_lf + 1);
+
+			if (bytes_left == 0) {
+				o = 0;
+				break;
+			}
+
+			if (bytes_left < 0)
+				goto fail;
+
 			memmove(buffer, lf + 1, bytes_left);
 			o = bytes_left;
 		}
-		else {
-			o = 0;
-		}
 	}
 
+fail:
 	printf("client thread terminating %d\n", fd);
 
 	close(fd);
@@ -326,7 +348,7 @@ void udp_pixelflut_ascii_handler(FrameCanvas *const offscreen_canvas, const int 
 	const int W = offscreen_canvas -> width(), H = offscreen_canvas -> height();
 	line_lock.unlock();
 
-	printf("resolution pixelflut_ascii: %dx%d, port %d\n", W, H, listen_port);
+	printf("resolution udp_pixelflut_ascii: %dx%d, port %d\n", W, H, listen_port);
 
 	for(;!interrupt_received;) {
 		char buffer[65536];
@@ -377,7 +399,7 @@ void udp_pixelflut_bin_handler(FrameCanvas *const offscreen_canvas, const int li
 	const int W = offscreen_canvas -> width(), H = offscreen_canvas -> height();
 	line_lock.unlock();
 
-	printf("resolution pixelflut_bin: %dx%d, port %d\n", W, H, listen_port);
+	printf("resolution udp_pixelflut_bin: %dx%d, port %d\n", W, H, listen_port);
 
 	for(;!interrupt_received;) {
 		char buffer[65536];
@@ -448,7 +470,7 @@ void udp_textmsgs_handler(const FrameCanvas *const offscreen_canvas, const int l
 {
 	int fd = make_socket(interface, listen_port);
 
-	printf("text, listening on %s:%d\n", interface, listen_port);
+	printf("udp ascii/utf-8 text, listening on %s:%d\n", interface, listen_port);
 
 	for(;!interrupt_received;) {
 		char buffer[65536];
@@ -555,7 +577,7 @@ int main(int argc, char *argv[]) {
 	/* x_origin is set just right of the screen */
 	x_orig = (matrix_options.chain_length * matrix_options.cols) + 5;
 	y_orig = 0;
-	int brightness = 100, listen_port = 5001, listen_port3 = 5003, listen_port4 = 5004, pixelflut_listen = 2342;
+	int brightness = 100, listen_port = 5001, listen_port3 = 5003, listen_port4 = 5004;
 	const char *interface = "127.0.0.1";
 
 	int opt;
@@ -602,9 +624,9 @@ int main(int argc, char *argv[]) {
 
 	std::thread t4(udp_pixelflut_bin_handler, offscreen_canvas, listen_port4, interface);
 
-	std::thread t5(pixelflut_announcer, listen_port4, interface, offscreen_canvas->width(), offscreen_canvas->height());
+	std::thread t6(tcp_pixelflut_ascii_handler, offscreen_canvas, listen_port4, interface);
 
-	std::thread t6(tcp_pixelflut_ascii_handler, offscreen_canvas, pixelflut_listen, interface);
+	std::thread t5(pixelflut_announcer, listen_port4, interface, offscreen_canvas->width(), offscreen_canvas->height());
 
 	time_t ss = 0;
 
