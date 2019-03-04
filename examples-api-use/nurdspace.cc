@@ -456,7 +456,7 @@ void pixelflut_announcer(const int port, const char *const interface, const int 
 	constexpr int PROTOCOL_VERSION = 1;
 
 	char sbuf[4096];
-	int len = snprintf(sbuf, sizeof(sbuf), "pixelvloed:%d %s:%d %d*%d", PROTOCOL_VERSION, interface, port, width, height);
+	int len = snprintf(sbuf, sizeof(sbuf), "pixelvloed:%d.00 %s:%d %d*%d", PROTOCOL_VERSION, interface, port, width, height);
 
 	for(;!interrupt_received;) {
 		if (sendto(fd, sbuf, len, 0, (struct sockaddr*) &send_addr, sizeof send_addr) == -1)
