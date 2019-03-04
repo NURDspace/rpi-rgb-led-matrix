@@ -40,12 +40,6 @@ static int usage(const char *progname) {
 	return 1;
 }
 
-static bool FullSaturation(const Color &c) {
-	return (c.r == 0 || c.r == 255)
-		&& (c.g == 0 || c.g == 255)
-		&& (c.b == 0 || c.b == 255);
-}
-
 class frame
 {
 	private:
@@ -65,15 +59,17 @@ class frame
 
 		int height() const { return h; }
 
-		void setPixel(int x, int y, int r, int g, int b) {
+		bool setPixel(int x, int y, int r, int g, int b) {
 			if (x < 0 || y < 0 || x >= w || y >= h)
-				return;
+				return false;
 
 			int o = y * w * 3 + x * 3;
 
 			pixels[o + 0] = r;
 			pixels[o + 1] = g;
 			pixels[o + 2] = b;
+
+			return true;
 		}
 
 		uint8_t *getLow() const { return pixels; }
@@ -153,10 +149,10 @@ void blit(frame *const work, const textImage *const in, const int target_x, cons
 	}
 }
 
-int make_socket(const char *const interface, const uint16_t port)
+int make_socket(const char *const interface, const uint16_t port, const bool is_udp = true)
 {
 	/* Create the socket. */
-	int sock = socket(PF_INET, SOCK_DGRAM, 0);
+	int sock = socket(PF_INET, is_udp ? SOCK_DGRAM : SOCK_STREAM, 0);
 	if (sock < 0)
 	{
 		perror ("socket");
@@ -213,6 +209,111 @@ bool wait_for_data(const int fd)
 	return false;
 }
 
+bool handle_PX_command(char *const line)
+{
+	// PX 20 30 ff8800
+	if (line[0] != 'P' || line[1] != 'X')
+		return false;
+
+	int tx = atoi(&line[3]);
+	char *space = strchr(&line[4], ' ');
+	if (!space)
+		return false;
+
+	int ty = atoi(space + 1);
+
+	space = strchr(space + 1, ' ');
+	if (!space)
+		return false;
+	//printf("%d %d %s\n", cnt, p[0], p);
+
+	char *rgb = space + 1;
+	int r = (fromhex(rgb[0]) << 4) + fromhex(rgb[1]);
+	int g = (fromhex(rgb[2]) << 4) + fromhex(rgb[3]);
+	int b = (fromhex(rgb[4]) << 4) + fromhex(rgb[5]);
+
+	if (r < 0 || g < 0 || b < 0 || r > 255 || g > 255 || b > 255)
+		return false;
+
+	return pf -> setPixel(tx, ty, r, g, b);
+}
+
+void tcp_pixelflut_ascii_handler_do(const int fd)
+{
+	char buffer[4096];
+	int o = 0;
+
+	for(;!interrupt_received;) {
+		if (!wait_for_data(fd))
+			continue;
+
+		int n = read(fd, &buffer[o], sizeof buffer - o - 1);
+		if (n <= 0)
+			break;
+
+		o += n;
+		if (o == sizeof buffer - 1)
+			break;
+
+		buffer[o] = 0x00;
+		char *lf = strchr(buffer, '\n');
+		if (!lf)
+			continue;
+
+		*lf = 0x00;
+
+		if (!handle_PX_command(buffer))
+			break;
+
+		int offset_lf = lf - buffer;
+		int bytes_left = o - (offset_lf + 1);
+
+		if (bytes_left > 0) {
+			memmove(buffer, lf + 1, bytes_left);
+			o = bytes_left;
+		}
+		else {
+			o = 0;
+		}
+	}
+
+	close(fd);
+}
+
+void tcp_pixelflut_ascii_handler(FrameCanvas *const offscreen_canvas, const int listen_port, const char *const interface)
+{
+	int fd = make_socket(interface, listen_port, false);
+
+	line_lock.lock();
+	const int W = offscreen_canvas -> width(), H = offscreen_canvas -> height();
+	line_lock.unlock();
+
+	printf("resolution tcp_pixelflut_ascii: %dx%d, port %d\n", W, H, listen_port);
+
+	listen(fd, SOMAXCONN);
+
+	for(;!interrupt_received;) {
+		struct sockaddr_in peer;
+		socklen_t peer_len = sizeof(peer);
+
+		if (!wait_for_data(fd))
+			continue;
+
+		int new_fd = accept(fd, (struct sockaddr *)&peer, &peer_len);
+
+		if (new_fd == -1)
+			continue;
+
+		char addr[INET_ADDRSTRLEN];
+		inet_ntop(AF_INET, &(peer.sin_addr), addr, INET_ADDRSTRLEN);
+
+		printf("TCP pixelflut connection from %s\n", addr);
+
+		std::thread t(tcp_pixelflut_ascii_handler_do, fd);
+		t.detach();
+	}
+}
+
 void udp_pixelflut_ascii_handler(FrameCanvas *const offscreen_canvas, const int listen_port, const char *const interface)
 {
 	int fd = make_socket(interface, listen_port);
@@ -239,45 +340,20 @@ void udp_pixelflut_ascii_handler(FrameCanvas *const offscreen_canvas, const int 
 
 		buffer[n] = 0x00;
 
-		int cnt = 0;
-
 		char *p = buffer;
 		while(p) {
 			char *lf = strchr(p, '\n');
 			if (lf)
 				*lf = 0x00;
 
-			// PX 20 30 ff8800
-			if (p[0] != 'P' || p[1] != 'X')
+			if (!handle_PX_command(p))
 				break;
-
-			int tx = atoi(&p[3]);
-			char *space = strchr(&p[4], ' ');
-			if (!space)
-				break;
-
-			int ty = atoi(space + 1);
-
-			space = strchr(space + 1, ' ');
-			if (!space)
-				break;
-			//printf("%d %d %s\n", cnt, p[0], p);
-
-			cnt++;
-
-			char *rgb = space + 1;
-			int r = (fromhex(rgb[0]) << 4) + fromhex(rgb[1]);
-			int g = (fromhex(rgb[2]) << 4) + fromhex(rgb[3]);
-			int b = (fromhex(rgb[4]) << 4) + fromhex(rgb[5]);
-
-			pf -> setPixel(tx, ty, r, g, b);
 
 			if (lf)
 				p = lf + 1;
 			else
 				p = NULL;
 		}
-		//printf("%d\n", cnt);
 
 		line_lock.lock();
 
@@ -355,7 +431,7 @@ textImage * choose_ti_higher_prio(std::vector<textImage *> *const elements)
 
 ssize_t choose_ti_same_prio(std::vector<textImage *> *const elements, const int cmp_prio)
 {
-	for(ssize_t nr=0; nr<elements -> size(); nr++) {
+	for(size_t nr=0; nr<elements -> size(); nr++) {
 		int cur_prio = elements -> at(nr) -> getPrio();
 		if (cur_prio == cmp_prio)
 			return nr;
@@ -388,8 +464,6 @@ void udp_textmsgs_handler(const FrameCanvas *const offscreen_canvas, const int l
 		inet_ntop(AF_INET, &(peer.sin_addr), addr, INET_ADDRSTRLEN);
 
 		buffer[n] = 0;
-
-		bool is_idle = false, add = false;
 
 		time_t t = time(NULL);
 		printf("%s %s", addr, ctime(&t));
@@ -436,7 +510,7 @@ void udp_textmsgs_handler(const FrameCanvas *const offscreen_canvas, const int l
 void pixelflut_announcer(const int port, const char *const interface, const int width, const int height)
 {
 	struct sockaddr_in send_addr;
-	int trueflag = 1, count = 0;
+	int trueflag = 1;
 
 	int fd;
 	if ((fd = socket(AF_INET, SOCK_DGRAM, 0)) == -1)
@@ -474,11 +548,10 @@ int main(int argc, char *argv[]) {
 	if (!rgb_matrix::ParseOptionsFromFlags(&argc, &argv, &matrix_options, &runtime_opt))
 		return usage(argv[0]);
 
-	const char *bdf_font_file = NULL;
 	/* x_origin is set just right of the screen */
 	x_orig = (matrix_options.chain_length * matrix_options.cols) + 5;
 	y_orig = 0;
-	int brightness = 100, listen_port = 5001, listen_port3 = 5003, listen_port4 = 5004;
+	int brightness = 100, listen_port = 5001, listen_port3 = 5003, listen_port4 = 5004, pixelflut_listen = 2342;
 	const char *interface = "127.0.0.1";
 
 	int opt;
@@ -505,6 +578,7 @@ int main(int argc, char *argv[]) {
 
 	canvas->SetBrightness(brightness);
 
+	signal(SIGPIPE, SIG_IGN);
 	signal(SIGTERM, InterruptHandler);
 	signal(SIGINT, InterruptHandler);
 	signal(SIGUSR1, InterruptHandler);
@@ -525,6 +599,8 @@ int main(int argc, char *argv[]) {
 	std::thread t4(udp_pixelflut_bin_handler, offscreen_canvas, listen_port4, interface);
 
 	std::thread t5(pixelflut_announcer, listen_port4, interface, offscreen_canvas->width(), offscreen_canvas->height());
+
+	std::thread t6(tcp_pixelflut_ascii_handler, offscreen_canvas, pixelflut_listen, interface);
 
 	time_t ss = 0;
 
@@ -612,6 +688,7 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
+	t6.join();
 	t5.join();
 	t4.join();
 	t3.join();
