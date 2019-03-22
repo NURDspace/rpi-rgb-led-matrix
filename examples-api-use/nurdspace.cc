@@ -40,6 +40,23 @@ static int usage(const char *progname) {
 	return 1;
 }
 
+bool WRITE(const int fd, const char *what, int len)
+{
+        while(len > 0) {
+                int rc = write(fd, what, len);
+
+                if (rc <= 0) {
+                        printf("%s (%d)\n", strerror(errno), errno);
+                        return false;
+                }
+
+                len -= rc;
+                what += rc;
+        }
+
+        return true;
+}
+
 class frame
 {
 	private:
@@ -58,6 +75,22 @@ class frame
 		int width() const { return w; }
 
 		int height() const { return h; }
+
+		bool getPixel(int x, int y, int *const r, int *const g, int *const b) {
+			if (x < 0 || y < 0)
+				return false;
+
+			if (x >= w && y >= h)
+				return true;
+
+			int o = y * w * 3 + x * 3;
+
+			*r = pixels[o + 0];
+			*g = pixels[o + 1];
+			*b = pixels[o + 2];
+
+			return true;
+		}
 
 		bool setPixel(int x, int y, int r, int g, int b) {
 			if (x < 0 || y < 0)
@@ -206,14 +239,30 @@ int wait_for_data(const int fd)
 {
 	struct pollfd pf[1] = { { fd, POLLIN, 0 } };
 
-	return poll(pf, 1, 100);
+	int rc = poll(pf, 1, 100);
+	if (rc == -1)
+		printf("poll: %s\n", strerror(errno));
+
+	return rc;
 }
 
-bool handle_PX_command(char *const line)
+bool handle_command(const int fd, char *const line)
 {
+	if (strncmp(line, "SIZE ", 5) == 0) {
+		char out[32];
+		int len = snprintf(out, sizeof out, "SIZE %d %d\n", pf -> width(), pf -> height());
+
+		if (fd >= 0)
+			return WRITE(fd, out, len);
+
+		return true;
+	}
+
 	// PX 20 30 ff8800
 	if (line[0] != 'P' || line[1] != 'X') {
-		printf("invalid header: %c%c\n", line[0], line[1]);
+		if (line[0])
+			printf("invalid header: %d %d\n", line[0], line[1]);
+
 		return false;
 	}
 
@@ -228,8 +277,17 @@ bool handle_PX_command(char *const line)
 
 	space = strchr(space + 1, ' ');
 	if (!space) {
-		printf("short 2\n");
-		return false;
+		// requesting the current pixel value
+		int r = 255, g = 0, b = 0;
+		pf -> getPixel(tx, ty, &r, &g, &b);
+
+		char buffer[64];
+		int len = snprintf(buffer, sizeof buffer, "PX %d %d %02x%02x%02x\n", tx, ty, r, g, b);
+
+		if (fd >= 0)
+			return WRITE(fd, buffer, len);
+
+		return true;
 	}
 	//printf("%d %d %s\n", cnt, p[0], p);
 
@@ -282,7 +340,7 @@ void tcp_pixelflut_ascii_handler_do(const int fd)
 
 			*lf = 0x00;
 
-			if (!handle_PX_command(buffer)) {
+			if (!handle_command(fd, buffer)) {
 				printf("invalid PX\n");
 				goto fail;
 			}
@@ -387,7 +445,7 @@ void udp_pixelflut_ascii_handler(FrameCanvas *const offscreen_canvas, const int 
 			if (lf)
 				*lf = 0x00;
 
-			if (!handle_PX_command(p))
+			if (!handle_command(-1, p))
 				break;
 
 			if (lf)
