@@ -628,7 +628,7 @@ void udp_textmsgs_handler(const FrameCanvas *const offscreen_canvas, const int l
 
 		line_lock.unlock();
 
-		pf -> clear();
+//		pf -> clear();
 	}
 }
 
