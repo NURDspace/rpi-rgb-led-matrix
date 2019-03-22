@@ -289,7 +289,7 @@ bool handle_command(const int fd, char *const line)
 
 		char buffer[64];
 		int len = snprintf(buffer, sizeof buffer, "PX %d %d %02x%02x%02x\n", tx, ty, r, g, b);
-printf("%s\n", buffer);
+		//printf("%s\n", buffer);
 
 		if (fd >= 0)
 			return WRITE(fd, buffer, len);
@@ -336,9 +336,12 @@ void tcp_pixelflut_ascii_handler_do(const int fd)
 			break;
 		}
 
+		buffer[o + n] = 0x00;
+		// printf("received: |%s|\n", &buffer[o]);
+
 		o += n;
 
-		buffer[o] = 0x00;
+		// printf("before: |%s|\n", buffer);
 
 		for(;;) {
 			char *lf = strchr(buffer, '\n');
@@ -347,6 +350,7 @@ void tcp_pixelflut_ascii_handler_do(const int fd)
 
 			*lf = 0x00;
 
+			// printf("command: %s\n", buffer);
 			if (!handle_command(fd, buffer)) {
 				printf("invalid PX\n");
 				goto fail;
@@ -360,13 +364,16 @@ void tcp_pixelflut_ascii_handler_do(const int fd)
 				break;
 			}
 
-			if (bytes_left < 0)
+			if (bytes_left < 0) {
+				printf("%d bytes left\n", bytes_left);
 				goto fail;
+			}
 
 			memmove(buffer, lf + 1, bytes_left);
 			o = bytes_left;
 			buffer[o] = 0x00;
 		}
+		// printf("after: |%s|\n\n", buffer);
 	}
 
 fail:
