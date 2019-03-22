@@ -330,7 +330,7 @@ void tcp_pixelflut_ascii_handler_do(const int fd)
 			break;
 		}
 
-		int n = read(fd, &buffer[o], sizeof buffer - o);
+		int n = read(fd, &buffer[o], sizeof buffer - 1 - o);
 		if (n <= 0) {
 			printf("read error: %d\n", errno);
 			break;
@@ -365,6 +365,7 @@ void tcp_pixelflut_ascii_handler_do(const int fd)
 
 			memmove(buffer, lf + 1, bytes_left);
 			o = bytes_left;
+			buffer[o] = 0x00;
 		}
 	}
 
