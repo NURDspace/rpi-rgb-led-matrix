@@ -60,8 +60,11 @@ class frame
 		int height() const { return h; }
 
 		bool setPixel(int x, int y, int r, int g, int b) {
-			if (x < 0 || y < 0 || x >= w || y >= h)
+			if (x < 0 || y < 0)
 				return false;
+
+			if (x >= w && y >= h)
+				return true;
 
 			int o = y * w * 3 + x * 3;
 
@@ -199,21 +202,18 @@ int fromhex(int c)
 	return c - '0';
 }
 
-bool wait_for_data(const int fd)
+int wait_for_data(const int fd)
 {
 	struct pollfd pf[1] = { { fd, POLLIN, 0 } };
 
-	if (poll(pf, 1, 100) == 1)
-		return true;
-
-	return false;
+	return poll(pf, 1, 100);
 }
 
 bool handle_PX_command(char *const line)
 {
 	// PX 20 30 ff8800
 	if (line[0] != 'P' || line[1] != 'X') {
-		printf("invalid header\n");
+		printf("invalid header: %c%c\n", line[0], line[1]);
 		return false;
 	}
 
@@ -254,7 +254,10 @@ void tcp_pixelflut_ascii_handler_do(const int fd)
 	printf("client thread started %d\n", fd);
 
 	for(;!interrupt_received;) {
-		if (!wait_for_data(fd))
+		int rc = wait_for_data(fd);
+		if (rc == -1)
+			break;
+		if (rc == 0)
 			continue;
 
 		if (o == sizeof buffer) {
@@ -322,7 +325,10 @@ void tcp_pixelflut_ascii_handler(FrameCanvas *const offscreen_canvas, const int 
 		struct sockaddr_in peer;
 		socklen_t peer_len = sizeof(peer);
 
-		if (!wait_for_data(fd))
+		int rc = wait_for_data(fd);
+		if (rc == -1)
+			break;
+		if (rc == 0)
 			continue;
 
 		int new_fd = accept(fd, (struct sockaddr *)&peer, &peer_len);
@@ -335,8 +341,14 @@ void tcp_pixelflut_ascii_handler(FrameCanvas *const offscreen_canvas, const int 
 
 		printf("TCP pixelflut connection from %s: %d\n", addr, new_fd);
 
-		std::thread t(tcp_pixelflut_ascii_handler_do, new_fd);
-		t.detach();
+		try {
+			std::thread t(tcp_pixelflut_ascii_handler_do, new_fd);
+			t.detach();
+		}
+		catch(std::system_error & e) {
+			printf("thread error: %s\n", e.what());
+			close(new_fd);
+		}
 	}
 }
 
@@ -355,7 +367,10 @@ void udp_pixelflut_ascii_handler(FrameCanvas *const offscreen_canvas, const int 
 		struct sockaddr_in peer;
 		socklen_t peer_len = sizeof(peer);
 
-		if (!wait_for_data(fd))
+		int rc = wait_for_data(fd);
+		if (rc == -1)
+			break;
+		if (rc == 0)
 			continue;
 
 		ssize_t n = recvfrom(fd, buffer, sizeof buffer - 1, 0, (struct sockaddr *)&peer, &peer_len);
@@ -406,7 +421,10 @@ void udp_pixelflut_bin_handler(FrameCanvas *const offscreen_canvas, const int li
 		struct sockaddr_in peer;
 		socklen_t peer_len = sizeof(peer);
 
-		if (!wait_for_data(fd))
+		int rc = wait_for_data(fd);
+		if (rc == -1)
+			break;
+		if (rc == 0)
 			continue;
 
 		ssize_t n = recvfrom(fd, buffer, sizeof buffer - 1, 0, (struct sockaddr *)&peer, &peer_len);
@@ -477,7 +495,10 @@ void udp_textmsgs_handler(const FrameCanvas *const offscreen_canvas, const int l
 		struct sockaddr_in peer;
 		socklen_t peer_len = sizeof(peer);
 
-		if (!wait_for_data(fd))
+		int rc = wait_for_data(fd);
+		if (rc == -1)
+			break;
+		if (rc == 0)
 			continue;
 
 		ssize_t n = recvfrom(fd, buffer, sizeof buffer, 0, (struct sockaddr *)&peer, &peer_len);
@@ -505,24 +526,29 @@ void udp_textmsgs_handler(const FrameCanvas *const offscreen_canvas, const int l
 
 		ssize_t nr = choose_ti_same_prio(&ti_cur, cur_prio);
 
-		if (nr >= 0) {
-			font font_(DEFAULT_FONT_FILE, std::string(buffer) + " " + ti_cur.at(nr) -> getOrg(), offscreen_canvas->height(), true);
-			textImage *ti = font_.getImage();
+		try {
+			if (nr >= 0) {
+				font font_(DEFAULT_FONT_FILE, std::string(buffer) + " " + ti_cur.at(nr) -> getOrg(), offscreen_canvas->height(), true);
+				textImage *ti = font_.getImage();
 
-			delete ti_cur.at(nr);
-			ti_cur.at(nr) = ti;
-		}
-		else {
-			font font_(DEFAULT_FONT_FILE, buffer, offscreen_canvas->height(), true);
-			textImage *ti = font_.getImage();
-
-			if (ti -> idleStatus()) {
-				delete ti_idle;
-				ti_idle = ti;
+				delete ti_cur.at(nr);
+				ti_cur.at(nr) = ti;
 			}
 			else {
-				ti_cur.push_back(ti);
+				font font_(DEFAULT_FONT_FILE, buffer, offscreen_canvas->height(), true);
+				textImage *ti = font_.getImage();
+
+				if (ti -> idleStatus()) {
+					delete ti_idle;
+					ti_idle = ti;
+				}
+				else {
+					ti_cur.push_back(ti);
+				}
 			}
+		}
+		catch(const std::string & err) {
+			printf("Failed rendering text: %s\n", err.c_str());
 		}
 
 		x = offscreen_canvas->width();
