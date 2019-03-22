@@ -15,6 +15,7 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 
@@ -80,7 +81,7 @@ class frame
 			if (x < 0 || y < 0)
 				return false;
 
-			if (x >= w && y >= h)
+			if (x >= w || y >= h)
 				return true;
 
 			int o = y * w * 3 + x * 3;
@@ -96,7 +97,7 @@ class frame
 			if (x < 0 || y < 0)
 				return false;
 
-			if (x >= w && y >= h)
+			if (x >= w || y >= h)
 				return true;
 
 			int o = y * w * 3 + x * 3;
@@ -201,6 +202,11 @@ int make_socket(const char *const interface, const uint16_t port, const bool is_
 		exit(EXIT_FAILURE);
 	}
 
+	if (!is_udp) {
+		int on = 1;
+		setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, (char *) &on, sizeof(int));
+	}
+
 	/* Give the socket a name. */
 	struct sockaddr_in name;
 	name.sin_family = AF_INET;
@@ -283,6 +289,7 @@ bool handle_command(const int fd, char *const line)
 
 		char buffer[64];
 		int len = snprintf(buffer, sizeof buffer, "PX %d %d %02x%02x%02x\n", tx, ty, r, g, b);
+printf("%s\n", buffer);
 
 		if (fd >= 0)
 			return WRITE(fd, buffer, len);
