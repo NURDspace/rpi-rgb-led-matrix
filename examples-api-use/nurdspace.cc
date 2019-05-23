@@ -254,7 +254,7 @@ int wait_for_data(const int fd)
 
 bool handle_command(const int fd, char *const line)
 {
-	if (strncmp(line, "SIZE ", 5) == 0) {
+	if (strncmp(line, "SIZE", 4) == 0) {
 		char out[32];
 		int len = snprintf(out, sizeof out, "SIZE %d %d\n", pf -> width(), pf -> height());
 
