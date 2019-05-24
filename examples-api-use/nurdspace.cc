@@ -471,8 +471,6 @@ void udp_pixelflut_ascii_handler(FrameCanvas *const offscreen_canvas, const int 
 
 		line_lock.lock();
 
-		delete ti_idle;
-		ti_idle = NULL;
 		pf_last = time(NULL) + 1;
 
 		line_lock.unlock();
@@ -522,8 +520,6 @@ void udp_pixelflut_bin_handler(FrameCanvas *const offscreen_canvas, const int li
 
 		line_lock.lock();
 
-		delete ti_idle;
-		ti_idle = NULL;
 		pf_last = time(NULL) + 1;
 
 		line_lock.unlock();
