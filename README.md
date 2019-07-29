@@ -60,7 +60,8 @@ models (and the Pi Zero). With the faster models, the panels sometimes
 can't keep up with the speed; check out
 this [troubleshooting section](#troubleshooting) what to do.
 
-The [Raspbian Lite][raspbian-lite] distribution is recommended.
+A lightweight, non-GUI, distribution such as [Raspbian Lite][raspbian-lite]
+or [DietPi] is recommended.
 
 Types of Displays
 -----------------
@@ -109,7 +110,7 @@ This documentation is split into parts that help you through the process
     what goes where. You might also be interested
     in [breakout boards](./adapter) for that.
     If you have an [Adafruit HAT] or [Adafruit Bonnet], you can choose that with
-    a command line option [described below](#if-you-have-an-adafruit-hat)
+    a command line option [described below](#if-you-have-an-adafruit-hat-or-bonnet)
   2. Run a demo. You find that in the
      [examples-api-use/](./examples-api-use#running-some-demos) directory:
 ```
@@ -435,14 +436,14 @@ In general, run a minimal configuration on your Pi.
 
   * It seems that more recent version of Raspbian Lite result in some faint
     brightness fluctuations of the displays and it is not quite clear why (see
-    issue [#483](https://github.com/hzeller/rpi-rgb-led-matrix/issues/483)). If you are a Kernel person and can help figuring out what is
+    issue [#483](https://github.com/hzeller/rpi-rgb-led-matrix/issues/483)).
+    If you are a Kernel person and can help figuring out what is
     happening that would be very appreciated. Also, you might know a minimal
     Linux distribution that is more suited for near realtime applications ?
 
-The default install of **[Raspbian Lite][raspbian-lite]** seems to be a good
-starting point, as it has a reasonable minimal configuration to begin with.
-It recently has the issue of more interference with the matrix, so if you can
-recommend a more lightweight, realtime focused distribution, let me know.
+The default install of **[Raspbian Lite][raspbian-lite]** or **[DietPi]**
+seem to be good starting points, as they have a reasonably minimal
+configuration to begin with.
 
 ### Bad interaction with Sound
 If sound is enabled on your Pi, this will not work together with the LED matrix,
@@ -466,14 +467,12 @@ sudo update-initramfs -u
 
 Reboot and confirm that the module is not loaded.
 
-### I have followed the Adafruit Tutorial and it doesn't work
+### I have followed some tutorial on the Internet and it doesn't work
 
 Well, if you use this library, please read the documentation provided _here_,
 not on some other website. Most important for you to get started
-is the [wiring guide](./wiring.md).
-
-Adafruit has some outdated tutorial based on a super-ancient version of this
-library. It won't work.
+is the [wiring guide](./wiring.md). There are some tutorials floating around
+that refer to a very old version of this library.
 
 ### I have a Pi1 Revision1 and top part of Panel doesn't show green
 
@@ -524,9 +523,8 @@ ready-made vs. single-chain tradeoff is worthwhile, then you might go for that
 ### Switch the Pinout
 
 The Adafruit HAT/Bonnet uses this library but a modified pinout to support other
-features on the HAT. So they forked this library and modified the pinout there.
-However, that fork is _ancient_, so I strongly suggest to use this original
-library instead. You can choose the Adafruit pinout with a command line flag.
+features on the HAT. You can choose the Adafruit pinout with a command line
+flag.
 
 Just pass the option `--led-gpio-mapping=adafruit-hat`. This works on the C++
 and Python examples.
@@ -655,6 +653,7 @@ things, like this installation by Dirk in Scharbeutz, Germany:
 [rt-paper]: https://www.osadl.org/fileadmin/dam/rtlws/12/Brown.pdf
 [adafruit-hat]: https://www.adafruit.com/products/2345
 [raspbian-lite]: https://downloads.raspberrypi.org/raspbian_lite_latest
+[DietPi]: https://dietpi.com/
 [Adafruit HAT]: https://www.adafruit.com/products/2345
 [Adafruit Bonnet]: https://www.adafruit.com/product/3211
 [Nodejs binding]: https://github.com/zeitungen/node-rpi-rgb-led-matrix

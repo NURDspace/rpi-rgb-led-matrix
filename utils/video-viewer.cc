@@ -18,10 +18,12 @@ extern "C" {
 
 #include <fcntl.h>
 #include <getopt.h>
+#include <limits.h>
 #include <signal.h>
 #include <stdio.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "led-matrix.h"
@@ -62,12 +64,22 @@ static int usage(const char *progname) {
   fprintf(stderr, "usage: %s [options] <video>\n", progname);
   fprintf(stderr, "Options:\n"
           "\t-O<streamfile>     : Output to stream-file instead of matrix (don't need to be root).\n"
+          "\t-s <count>         : Skip these number of frames in the beginning.\n"
+          "\t-c <count>         : Only show this number of frames (excluding skipped frames).\n"
           "\t-v                 : verbose.\n"
           "\t-f                 : Loop forever.\n");
 
   fprintf(stderr, "\nGeneral LED matrix options:\n");
   rgb_matrix::PrintMatrixFlags(stderr);
   return 1;
+}
+
+static void add_nanos(struct timespec *accumulator, long nanoseconds) {
+  accumulator->tv_nsec += nanoseconds;
+  while (accumulator->tv_nsec > 1000000000) {
+    accumulator->tv_nsec -= 1000000000;
+    accumulator->tv_sec += 1;
+  }
 }
 
 int main(int argc, char *argv[]) {
@@ -81,9 +93,11 @@ int main(int argc, char *argv[]) {
   bool verbose = false;
   bool forever = false;
   int stream_output_fd = -1;
+  unsigned int frame_skip = 0;
+  unsigned int framecount_limit = UINT_MAX;  // even at 60fps, that is > 2yrs
 
   int opt;
-  while ((opt = getopt(argc, argv, "vO:R:Lf")) != -1) {
+  while ((opt = getopt(argc, argv, "vO:R:Lfc:s:")) != -1) {
     switch (opt) {
     case 'v':
       verbose = true;
@@ -106,6 +120,12 @@ int main(int argc, char *argv[]) {
       fprintf(stderr, "-R is deprecated. "
               "Use --led-pixel-mapper=\"Rotate:%s\" instead.\n", optarg);
       return 1;
+      break;
+    case 'c':
+      framecount_limit = atoi(optarg);
+      break;
+    case 's':
+      frame_skip = atoi(optarg);
       break;
     default:
       return usage(argv[0]);
@@ -243,15 +263,27 @@ int main(int argc, char *argv[]) {
   signal(SIGTERM, InterruptHandler);
   signal(SIGINT, InterruptHandler);
 
-  const int frame_wait_micros = 1e6 / fps;
+  const long frame_wait_nanos = 1e9 / fps;
+  struct timespec next_frame;
+
   do {
+    unsigned int frames_left = framecount_limit;
+    unsigned int frames_to_skip = frame_skip;
     if (forever) {
       av_seek_frame(pFormatCtx, videoStream, 0, AVSEEK_FLAG_ANY);
       avcodec_flush_buffers(pCodecCtx);
     }
-    while (!interrupt_received && av_read_frame(pFormatCtx, &packet) >= 0) {
+    clock_gettime(CLOCK_MONOTONIC, &next_frame);
+    while (!interrupt_received && av_read_frame(pFormatCtx, &packet) >= 0
+           && frames_left > 0) {
       // Is this a packet from the video stream?
       if (packet.stream_index==videoStream) {
+        if (frames_to_skip) { frames_to_skip--; continue; }
+
+        // Determine absolute end of this frame now so that we don't include
+        // decoding overhead. TODO: skip frames if getting too slow ?
+        add_nanos(&next_frame, frame_wait_nanos);
+
         // Decode video frame
         avcodec_decode_video2(pCodecCtx, pFrame, &frameFinished, &packet);
 
@@ -264,15 +296,18 @@ int main(int argc, char *argv[]) {
 
           CopyFrame(pFrameRGB, offscreen_canvas);
           frame_count++;
+          frames_left--;
           if (stream_writer) {
-            stream_writer->Stream(*offscreen_canvas, frame_wait_micros);
+            if (verbose) fprintf(stderr, "%6ld", frame_count);
+            stream_writer->Stream(*offscreen_canvas, frame_wait_nanos/1000);
           } else {
             offscreen_canvas = matrix->SwapOnVSync(offscreen_canvas);
           }
         }
-        if (!stream_writer) usleep(frame_wait_micros);
+        if (!stream_writer) {
+          clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &next_frame, NULL);
+        }
       }
-
       // Free the packet that was allocated by av_read_frame
       av_free_packet(&packet);
     }
@@ -283,6 +318,8 @@ int main(int argc, char *argv[]) {
     // at the output, so that commandline-shell editing is not messed up.
     fprintf(stderr, "Got interrupt. Exiting\n");
   }
+
+  delete matrix;
 
   // Free the RGB image
   av_free(buffer);
