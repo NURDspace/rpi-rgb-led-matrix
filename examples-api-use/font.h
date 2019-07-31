@@ -9,6 +9,7 @@
 //#define DEFAULT_FONT_FILE "seguiemj.ttf"
 //#define DEFAULT_FONT_FILE "EmojiOneColor-SVGinOT-1.3/EmojiOneColor-SVGinOT.ttf"
 #define DEFAULT_FONT_FILE "/usr/share/fonts/truetype/unifont/unifont.ttf"
+#define DEFAULT_PROP_FONT_FILE "/usr/share/fonts/truetype/msttcorefonts/Courier_New.ttf"
 
 class textImage
 {
