@@ -1,3 +1,5 @@
+#include "font.h"
+
 class frame
 {
 	private:
@@ -18,3 +20,5 @@ class frame
 		void fade();
 		void put(FrameCanvas *const offscreen_canvas);
 };
+
+void blit(frame *const work, const textImage *const in, const int target_x, const int target_y, int source_x, int source_y, const int source_w, const int source_h, const bool transparent);

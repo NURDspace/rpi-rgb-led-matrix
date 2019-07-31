@@ -46,52 +46,6 @@ static int usage(const char *progname) {
 
 frame *work = NULL;
 
-void blit(frame *const work, const textImage *const in, const int target_x, const int target_y, int source_x, int source_y, const int source_w, const int source_h, const bool transparent)
-{
-	int endx = source_x + source_w;
-	if (endx > in->getW())
-		endx = in->getW();
-
-	int endy = source_y + source_h;
-	if (endy > in->getH())
-		endy = in->getH();
-
-	if (source_x < 0)
-		source_y = 0;
-
-	if (source_y < 0)
-		source_y = 0;
-
-	const uint8_t *const buffer = in -> getBuffer();
-
-	for(int y=source_y; y<endy; y++) {
-		for(int x=source_x; x<endx; x++) {
-			const int offset_source = y * in->getW() * 3 + x * 3;
-
-			int tx = target_x + (x - source_x);
-			int ty = target_y + (y - source_y);
-
-			if (tx < 0)
-				continue;
-			if (ty < 0)
-				continue;
-
-			if (tx >= work -> width())
-				continue;
-
-			if (ty >= work -> height())
-				continue;
-
-			int r = buffer[offset_source + 0];
-			int g = buffer[offset_source + 1];
-			int b = buffer[offset_source + 2];
-
-			if (!transparent || (transparent && (r || g || b)))
-				work -> setPixel(tx, ty, r, g, b);
-		}
-	}
-}
-
 textImage *ti_idle = NULL;
 std::vector<textImage *> ti_cur;
 std::mutex line_lock;

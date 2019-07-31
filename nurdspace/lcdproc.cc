@@ -306,6 +306,8 @@ void lcdproc_handler_do(const int fd, int font_height)
 
 		o += n;
 
+		bool redraw = false;
+
 		for(;;) {
 			char *lf = strchr(buffer, '\n');
 			if (!lf)
@@ -318,8 +320,7 @@ void lcdproc_handler_do(const int fd, int font_height)
 			if (!lcdproc_command(fd, buffer, font_height)) {
 				// silently ignore errors for now: goto fail;
 			}
-
-			// redraw `frame' FIXME
+			redraw = true;
 
 			int offset_lf = lf - buffer;
 			int bytes_left = o - (offset_lf + 1);
@@ -337,6 +338,15 @@ void lcdproc_handler_do(const int fd, int font_height)
 			memmove(buffer, lf + 1, bytes_left);
 			o = bytes_left;
 			buffer[o] = 0x00;
+		}
+
+		if (redraw) {
+			// redraw `frame' FIXME
+			for(auto cs : screens) {
+				for(auto cw : cs.widgets) {
+					blit(lcdproc, cw.ti, cw.x * font_height, cw.y * font_height, 0, 0, cw.ti->getW(), cw.ti->getH(), cw.ti->getTransparent());
+				}
+			}
 		}
 	}
 
