@@ -1,0 +1,3 @@
+ - remove screens belonging to a closed tcp session
+
+- http interface voor uploaden bitmaps/tekst

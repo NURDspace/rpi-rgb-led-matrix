@@ -85,7 +85,7 @@ typedef enum { LWT_STRING, LWT_HBAR, LWT_VBAR, LWT_ICON, LWT_TITLE, LWT_SCROLLER
 typedef struct
 {
 	lcdproc_widget_type_t type;
-	int id;
+	std::string id;
 	std::string text; // only string and title are supported currently
 	int x, y;
 	textImage *ti;
@@ -94,7 +94,8 @@ lcdproc_widget_t;
 
 typedef struct
 {
-	int prio, id;
+	int prio;
+	std::string id;
 	std::string name;
 	int duration;
 
@@ -105,7 +106,7 @@ lcdproc_screen_t;
 std::mutex lpl; // lcdproc lock
 std::vector<lcdproc_screen_t> screens;
 
-std::vector<lcdproc_screen_t>::iterator find_screen(int id)
+std::vector<lcdproc_screen_t>::iterator find_screen(std::string id)
 {
 	lpl.lock();
 
@@ -117,7 +118,7 @@ std::vector<lcdproc_screen_t>::iterator find_screen(int id)
 	return screens.end();
 }
 
-lcdproc_widget_t * find_widget(int screen_id, int widget_id)
+lcdproc_widget_t * find_widget(std::string screen_id, std::string widget_id)
 {
 	lpl.lock();
 
@@ -144,7 +145,8 @@ bool lcdproc_command(const int fd, const char *const cmd, int font_height)
 		return false;
 
 	if (parts.at(0) == "hello") {
-		WRITE(fd, "connect\n", 8);
+		std::string reply = format("connect lcd wid=%d hgt=%d\n", lcdproc->width()/font_height, lcdproc->height()/font_height);
+		WRITE(fd, reply.c_str(), reply.size());
 		return true;
 	}
 
@@ -156,13 +158,13 @@ bool lcdproc_command(const int fd, const char *const cmd, int font_height)
 
 	if (parts.at(0) == "screen_add" && parts.size() == 2) {
 		lpl.lock();
-		screens.push_back({ 255, atoi(parts.at(1).c_str()), "", 32, { } });
+		screens.push_back({ 255, parts.at(1), "", 32, { } });
 		lpl.unlock();
 		return true;
 	}
 
 	if (parts.at(0) == "screen_del" && parts.size() == 2) {
-		int id = atoi(parts.at(1).c_str());
+		std::string id = parts.at(1);
 		bool found = false;
 
 		auto it = find_screen(id);
@@ -177,7 +179,7 @@ bool lcdproc_command(const int fd, const char *const cmd, int font_height)
 	}
 
 	if (parts.at(0) == "screen_set" && parts.size() >= 2) {
-		int id = atoi(parts.at(1).c_str());
+		std::string id = parts.at(1);
 		bool found = false;
 
 		auto it = find_screen(id);
@@ -204,14 +206,16 @@ bool lcdproc_command(const int fd, const char *const cmd, int font_height)
 	}
 
 	if (parts.at(0) == "widget_add" && parts.size() >= 4) {
-		int screen_id = atoi(parts.at(1).c_str());
-		int widget_id = atoi(parts.at(2).c_str());
+		std::string screen_id = parts.at(1);
+		std::string widget_id = parts.at(2);
 
 		lcdproc_widget_type_t t = LWT_NONE;
 		if (parts.at(3) == "string")
 			t = LWT_STRING;
 		else if (parts.at(3) == "title")
 			t = LWT_TITLE;
+		else if (parts.at(3) == "hbar")
+			t = LWT_HBAR;
 
 		bool found = false;
 
@@ -230,8 +234,8 @@ bool lcdproc_command(const int fd, const char *const cmd, int font_height)
 	}
 
 	if (parts.at(0) == "widget_del" && parts.size() == 3) {
-		int screen_id = atoi(parts.at(1).c_str());
-		int widget_id = atoi(parts.at(2).c_str());
+		std::string screen_id = parts.at(1);
+		std::string widget_id = parts.at(2);
 
 		bool found = false;
 		auto it = find_screen(screen_id);
@@ -251,8 +255,8 @@ bool lcdproc_command(const int fd, const char *const cmd, int font_height)
 	}
 
 	if (parts.at(0) == "widget_set" && parts.size() >= 4) {
-		int screen_id = atoi(parts.at(1).c_str());
-		int widget_id = atoi(parts.at(2).c_str());
+		std::string screen_id = parts.at(1);
+		std::string widget_id = parts.at(2);
 
 		bool found = false;
 		lcdproc_widget_t *widget = find_widget(screen_id, widget_id);
@@ -265,6 +269,13 @@ bool lcdproc_command(const int fd, const char *const cmd, int font_height)
 				widget->x = atoi(parts.at(3).c_str()); // FIXME check dimensions
 				widget->y = atoi(parts.at(4).c_str());
 				widget->text = parts.at(5);
+printf("%d,%d %s\n", widget->x, widget->y, widget->text.c_str());
+			}
+			else if (widget->type == LWT_HBAR) {
+				widget->x = atoi(parts.at(3).c_str()); // FIXME check dimensions
+				widget->y = atoi(parts.at(4).c_str());
+				widget->text = std::string(atoi(parts.at(5).c_str()), '*');
+printf("%d,%d %s\n", widget->x, widget->y, widget->text.c_str());
 			}
 			else {
 				found = false;
@@ -350,10 +361,16 @@ void lcdproc_handler_do(const int fd, int font_height)
 		}
 
 		if (redraw) {
+			lcdproc->clear();
+
 			// redraw `frame' FIXME
 			for(auto cs : screens) {
 				for(auto cw : cs.widgets) {
-					blit(lcdproc, cw.ti, cw.x * font_height, cw.y * font_height, 0, 0, cw.ti->getW(), cw.ti->getH(), cw.ti->getTransparent());
+					if (!cw.ti)
+						continue;
+
+					//printf("%dx%d => %d, %d\n", cw.ti->getW() * font_height, cw.ti->getH() * font_height, cw.x * font_height, cw.y * font_height);
+					blit(lcdproc, cw.ti, cw.x * font_height, cw.y * font_height, 0, 0, cw.ti->getW() * font_height, cw.ti->getH() * font_height, cw.ti->getTransparent());
 				}
 			}
 		}
