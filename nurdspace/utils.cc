@@ -1,9 +1,12 @@
 #include <ctype.h>
+#include <poll.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string>
 #include <string.h>
+#include <unistd.h>
 #include <arpa/inet.h>
+#include <netinet/tcp.h>
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <sys/types.h>
@@ -106,3 +109,66 @@ uint64_t get_ts()
 	gettimeofday(&tv, NULL);
 	return tv.tv_sec * 1000L * 1000L  + tv.tv_usec;
 }
+
+bool WRITE(const int fd, const char *what, int len)
+{
+        while(len > 0) {
+                int rc = write(fd, what, len);
+
+                if (rc <= 0) {
+                        printf("%s (%d)\n", strerror(errno), errno);
+                        return false;
+                }
+
+                len -= rc;
+                what += rc;
+        }
+
+        return true;
+}
+
+int make_socket(const char *const interface, const uint16_t port, const bool is_udp)
+{
+	/* Create the socket. */
+	int sock = socket(PF_INET, is_udp ? SOCK_DGRAM : SOCK_STREAM, 0);
+	if (sock < 0)
+	{
+		perror("socket");
+		exit (EXIT_FAILURE);
+	}
+
+	int reuse_addr = 1;
+	if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<char *>(&reuse_addr), sizeof reuse_addr) == -1) {
+		perror("SO_REUSEADDR");
+		exit(EXIT_FAILURE);
+	}
+
+	if (!is_udp) {
+		int on = 1;
+		setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, (char *) &on, sizeof(int));
+	}
+
+	/* Give the socket a name. */
+	struct sockaddr_in name;
+	name.sin_family = AF_INET;
+	name.sin_port = htons(port);
+	name.sin_addr.s_addr = inet_addr(interface);
+	if (bind(sock, (struct sockaddr *) &name, sizeof (name)) < 0) {
+		perror ("bind");
+		exit (EXIT_FAILURE);
+	}
+
+	return sock;
+}
+
+int wait_for_data(const int fd)
+{
+	struct pollfd pf[1] = { { fd, POLLIN, 0 } };
+
+	int rc = poll(pf, 1, 100);
+	if (rc == -1)
+		printf("poll: %s\n", strerror(errno));
+
+	return rc;
+}
+
