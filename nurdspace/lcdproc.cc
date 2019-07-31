@@ -80,7 +80,7 @@ bool split_in_args(std::vector<std::string>& qargs, std::string command)
 
 frame *lcdproc = NULL;
 
-typedef enum { LWT_STRING, LWT_HBAR, LWT_VBAR, LWT_ICON, LWT_TITLE, LWT_SCROLLER, LWT_FRAME } lcdproc_widget_type_t;
+typedef enum { LWT_STRING, LWT_HBAR, LWT_VBAR, LWT_ICON, LWT_TITLE, LWT_SCROLLER, LWT_FRAME, LWT_NONE } lcdproc_widget_type_t;
 
 typedef struct
 {
@@ -207,15 +207,24 @@ bool lcdproc_command(const int fd, const char *const cmd, int font_height)
 		int screen_id = atoi(parts.at(1).c_str());
 		int widget_id = atoi(parts.at(2).c_str());
 
+		lcdproc_widget_type_t t = LWT_NONE;
+		if (parts.at(3) == "string")
+			t = LWT_STRING;
+		else if (parts.at(3) == "title")
+			t = LWT_TITLE;
+
 		bool found = false;
-		auto it = find_screen(screen_id);
-		if (it != screens.end()) {
-			it->widgets.push_back({LWT_STRING, widget_id, "", 0, 0, nullptr });
 
-			found = true;
+		if (t != LWT_NONE) {
+			auto it = find_screen(screen_id);
+			if (it != screens.end()) {
+				it->widgets.push_back({ t, widget_id, "", 0, 0, nullptr });
+
+				found = true;
+			}
+
+			lpl.unlock();
 		}
-
-		lpl.unlock();
 
 		return found;
 	}
