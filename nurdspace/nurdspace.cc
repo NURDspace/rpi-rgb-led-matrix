@@ -490,7 +490,7 @@ int main(int argc, char *argv[])
 	y_orig = 0;
 	int brightness = 100, listen_port = 5001, listen_port3 = 5003, listen_port4 = 5004, listen_port5 = 13666;
 	const char *interface = "127.0.0.1";
-	std::string lcdproc_cfg = "$C00ff00";
+	std::string lcdproc_cfg = "$C00ff00$";
 
 	int opt;
 	while ((opt = getopt(argc, argv, "i:t:b:x:y:")) != -1) {
@@ -541,7 +541,7 @@ int main(int argc, char *argv[])
 
 	std::thread t5(pixelflut_announcer, listen_port4, interface, offscreen_canvas->width(), offscreen_canvas->height());
 
-	int lp_font_height = offscreen_canvas->height() / 4; // 4 rows of text
+	int lp_font_height = 16; //offscreen_canvas->height() / 3; // 3 rows of text
 	std::thread t7(lcdproc_handler, listen_port5, interface, lp_font_height, lcdproc_cfg);
 
 	time_t ss = 0;
