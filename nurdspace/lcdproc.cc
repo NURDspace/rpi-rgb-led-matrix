@@ -179,7 +179,7 @@ lcdproc_widget_t * find_widget(std::string screen_id, std::string widget_id)
 }
 
 // http://lcdproc.omnipotent.net/download/netstuff.txt
-bool lcdproc_command(const int fd, const char *const cmd, int font_height)
+bool lcdproc_command(const int fd, const char *const cmd, int font_height, std::string lcdproc_cfg)
 {
 	std::vector<std::string> parts;
        
@@ -291,16 +291,16 @@ bool lcdproc_command(const int fd, const char *const cmd, int font_height)
 			found = true;
 
 			if (widget->type == LWT_TITLE)
-				widget->text = parts.at(3);
+				widget->text = lcdproc_cfg + parts.at(3);
 			else if (widget->type == LWT_STRING) {
 				widget->x = atoi(parts.at(3).c_str()); // FIXME check dimensions
 				widget->y = atoi(parts.at(4).c_str());
-				widget->text = parts.at(5);
+				widget->text = lcdproc_cfg + parts.at(5);
 			}
 			else if (widget->type == LWT_HBAR) {
 				widget->x = atoi(parts.at(3).c_str()); // FIXME check dimensions
 				widget->y = atoi(parts.at(4).c_str());
-				widget->text = std::string(atoi(parts.at(5).c_str()), '*');
+				widget->text = lcdproc_cfg + std::string(atoi(parts.at(5).c_str()), '*');
 			}
 			else {
 				found = false;
@@ -341,7 +341,7 @@ void lcdproc_redraw(int font_height)
 	lpl.unlock();
 }
 
-void lcdproc_handler_do(const int fd, int font_height)
+void lcdproc_handler_do(const int fd, int font_height, std::string lcdproc_cfg)
 {
 	char buffer[4096];
 	int o = 0;
@@ -381,7 +381,7 @@ void lcdproc_handler_do(const int fd, int font_height)
 
 			printf("lcdproc command: %s\n", buffer);
 
-			if (!lcdproc_command(fd, buffer, font_height)) {
+			if (!lcdproc_command(fd, buffer, font_height, lcdproc_cfg)) {
 				// silently ignore errors for now: goto fail;
 			}
 			redraw = true;
@@ -420,8 +420,7 @@ fail:
 	lcdproc_redraw(font_height);
 }
 
-// FIXME dimensions in characters w/h
-void lcdproc_handler(const int listen_port, const char *const interface, int font_height)
+void lcdproc_handler(const int listen_port, const char *const interface, int font_height, std::string lcdproc_cfg)
 {
 	int fd = make_socket(interface, listen_port, false);
 
@@ -450,7 +449,7 @@ void lcdproc_handler(const int listen_port, const char *const interface, int fon
 		printf("lcdproc connection from %s: %d\n", addr, new_fd);
 
 		try {
-			std::thread t(lcdproc_handler_do, new_fd, font_height);
+			std::thread t(lcdproc_handler_do, new_fd, font_height, lcdproc_cfg);
 			t.detach();
 		}
 		catch(std::system_error & e) {
