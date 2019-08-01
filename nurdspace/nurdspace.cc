@@ -188,6 +188,10 @@ void tcp_pixelflut_ascii_handler_do(const int fd)
 			o = bytes_left;
 			buffer[o] = 0x00;
 		}
+
+		line_lock.lock();
+		pf_last = time(NULL) + 1;
+		line_lock.unlock();
 		// printf("after: |%s|\n\n", buffer);
 	}
 
@@ -285,9 +289,7 @@ void udp_pixelflut_ascii_handler(FrameCanvas *const offscreen_canvas, const int 
 		}
 
 		line_lock.lock();
-
 		pf_last = time(NULL) + 1;
-
 		line_lock.unlock();
 	}
 }
@@ -334,9 +336,7 @@ void udp_pixelflut_bin_handler(FrameCanvas *const offscreen_canvas, const int li
 		}
 
 		line_lock.lock();
-
 		pf_last = time(NULL) + 1;
-
 		line_lock.unlock();
 	}
 }
