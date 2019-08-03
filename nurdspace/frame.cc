@@ -7,6 +7,8 @@ using namespace rgb_matrix;
 
 frame::frame(const int w, const int h) : w(w), h(h), nb(w * h * 3) {
 	pixels = (uint8_t *)malloc(nb);
+
+	memset(pixels, 0x00, nb);
 }
 
 frame::~frame() {
